@@ -6,3 +6,7 @@ dist/
 .env.local
 .vite/
 .cache/
+.aq_cache/7c11fb98ccb0_meta.json
+.aq_cache/7c11fb98ccb0.parquet
+__pycache__/core.cpython-313.pyc
+__pycache__/data_manager.cpython-313.pyc
