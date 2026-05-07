@@ -48,8 +48,9 @@ STATION_COORDS = {
 STATIONS_LIST = list(STATION_COORDS.keys())
 
 # Features disponibles en el dataset histórico UCI
-FEATURES_UCI = ["PM2.5", "PM10", "SO2", "NO2", "CO", "O3",
-                "TEMP", "PRES", "DEW", "WSPM"]
+FEATURES_UCI  = ["PM2.5", "PM10", "SO2", "NO2", "CO", "O3",
+                 "TEMP", "PRES", "DEW", "WSPM"]
+FEATURES_HIST = FEATURES_UCI   # alias — core.py usa FEATURES_HIST
 
 # ══════════════════════════════════════════════════════════════════
 #  ESTADO GLOBAL DE SESIÓN

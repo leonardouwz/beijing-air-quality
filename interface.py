@@ -20,6 +20,7 @@ import pandas as pd
 
 from data_manager import (
     VERSION, CACHE_DIR, SES, STATIONS_LIST, FEATURES_UCI,
+    STATION_COORDS,
     load_historical_data, load_current_data,
     set_historico, set_actual, set_unificado,
     guardar_cache, cargar_cache, listar_caches, borrar_cache,
@@ -28,7 +29,7 @@ from data_manager import (
     exportar_resumen_estaciones, exportar_hipotesis,
 )
 from core import (
-    METRICAS, FORMULAS, PM25_THRESHOLDS,
+    METRICAS, FORMULAS, FEATURES_HIST, PM25_THRESHOLDS,
     build_station_vectors, build_month_vectors,
     knn_estaciones, knn_todas_metricas,
     detectar_eventos_criticos, knn_eventos_criticos,
