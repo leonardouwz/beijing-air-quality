@@ -1,64 +1,76 @@
-# Beijing Air Quality - Sistema KNN
+# Beijing Air Quality
 
-Sistema de análisis de calidad del aire de Beijing usando KNN para encontrar similitudes entre estaciones de monitoreo.
+Análisis de calidad del aire en Beijing usando KNN para encontrar similitudes entre estaciones de monitoreo. Compara dos períodos: datos terrestres históricos (2013-2017) y datos satelitales recientes (2022-2026).
 
-## Descripción
-
-Este proyecto implementa un sistema de similitud entre estaciones de calidad del aire usando el algoritmo KNN (K-Nearest Neighbors). Compara perfiles de contaminantes entre las 12 estaciones de monitoreo de Beijing en dos períodos:
-
-- **2013-2017**: Datos históricos UCI (estaciones terrestres)
-- **2022-2026**: Datos satelitales (Open-Meteo)
-
-### Características
-
-- Algoritmos KNN con múltiples métricas (coseno, Pearson, euclidiana)
-- Comparación de períodos históricos vs actuales
-- Análisis de patrones temporales mensuales
-- Generación de hipótesis científicas vía IA (Claude API)
-- Visualizaciones: radar multicontaminante, barras de similitud
-
-## Estructura de Datos
+## Estructura del repositorio
 
 ```
-2013-2017/
-  PRSA_Data_Aotizhongxin_20130301-20170228.csv
-  PRSA_Data_Changping_20130301-20170228.csv
-  ... (12 estaciones)
-
-2022-2026/
-  air_quality_historical.csv
-  city_info.csv
-  data_dictionary.csv
-  dataset-metadata.json
+beijing-air-quality/
+├── datasets/
+│   ├── 2013-2017/PRSA_Data_20130301-20170228/   # 12 CSVs UCI PRSA (horario)
+│   └── 2022-2026/                                # CSV Open-Meteo (diario)
+├── knn-dashboard/    # Panel web React/Vite
+├── python-analysis/  # CLI Python
+└── notebook/         # Análisis exploratorio Jupyter/Colab
 ```
 
-## Requisitos
+---
 
-- Node.js 18+
-- npm
+## knn-dashboard — Panel web interactivo
 
-## Instalación
+Panel React con KNN en el navegador, gráficas SVG y generación de hipótesis vía Claude API.
+
+**Requisitos:** Node.js 18+
 
 ```bash
+cd knn-dashboard
 npm install
+npm run dev       # http://localhost:3000
+npm run build     # build de producción
 ```
 
-## Ejecución
+**Tabs disponibles:**
+- 🔍 KNN Estaciones — similitud entre las 12 estaciones, métricas configurables (coseno / Pearson / euclidiana), radar multicontaminante
+- 📅 Patrones Temporales — PM2.5 mensual por estación + KNN cruzado entre períodos
+- 💡 Hipótesis IA — genera hipótesis científicas accionables usando Claude API
+- 📊 Comparativa — 2013-2017 vs 2022-2026 por estación
+
+---
+
+## python-analysis — CLI interactivo
+
+Sistema de consola con menús, caché Parquet y generación de hipótesis vía `ANTHROPIC_API_KEY`.
+
+**Requisitos:** Python 3.10+ · `pip install numpy pandas requests pyarrow`
 
 ```bash
-npm run dev
+cd python-analysis
+python interface.py       # menú interactivo completo
+python auto_explore.py    # exploración automática → exploration_output.txt
 ```
 
-El servidor se iniciado en http://localhost:3000
+**Módulos:**
 
-## Construir para producción
+| Archivo | Rol |
+|---|---|
+| `core.py` | Algoritmos puros: métricas KNN, detección de eventos críticos, hipótesis vía API |
+| `data_manager.py` | Carga de CSVs, ETL, caché Parquet (`.aq_cache/`), estado de sesión |
+| `interface.py` | UI de consola: menús, tablas, spinners |
+| `auto_explore.py` | Script de exploración automática |
 
-```bash
-npm run build
-```
+---
 
-## Dependencias
+## notebook — Análisis exploratorio
 
-- React 18
-- Vite 5
-- TypeScript
+`notebook/beijing_air_quality_analisis.ipynb` corre en **Google Colab**. Antes de ejecutarlo, sube la carpeta `datasets/` a Google Drive en `MyDrive/datasets/`.
+
+Genera 7 gráficas: boxplots por estación, series temporales, heatmap hora × mes, violinplots estacionales, matriz de correlación, similitud KNN y comparativa de períodos.
+
+---
+
+## Datasets
+
+| Dataset | Fuente | Cobertura | Columnas clave |
+|---|---|---|---|
+| `2013-2017/` | UCI PRSA (12 estaciones terrestres) | Mar 2013 – Feb 2017, horario | `PM2.5`, `PM10`, `SO2`, `NO2`, `CO`, `O3`, `TEMP`, `PRES`, `DEWP`, `WSPM` |
+| `2022-2026/` | Open-Meteo vía Kaggle (ciudad completa) | Ago 2022 – Feb 2026, diario | `pm2_5`, `pm10`, `ozone`, `nitrogen_dioxide`, `sulphur_dioxide`, `carbon_monoxide` |

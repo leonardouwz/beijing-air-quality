@@ -246,7 +246,7 @@ def menu_datos():
 def _cargar_historico():
     subtitulo("Cargar Datos Históricos 2013-2017")
     print(col("  Estructura esperada:", "GRAY"))
-    print(col("  2013-2017/PRSA_Data_20130301-20170228/", "DIM"))
+    print(col("  ../datasets/2013-2017/PRSA_Data_20130301-20170228/", "DIM"))
     print(col("    PRSA_Data_{Estacion}_20130301-20170228.csv", "DIM"))
     print()
 
@@ -264,8 +264,8 @@ def _cargar_historico():
                 set_historico(df, caches[int(op)-1]["path"])
                 ok("Histórico cargado desde caché."); pausar(); return
 
-    base = input(col("  Ruta base [2013-2017/PRSA_Data_20130301-20170228]: ", "YELLOW")).strip() \
-           or "2013-2017/PRSA_Data_20130301-20170228"
+    base = input(col("  Ruta base [../datasets/2013-2017/PRSA_Data_20130301-20170228]: ", "YELLOW")).strip() \
+           or "../datasets/2013-2017/PRSA_Data_20130301-20170228"
 
     try:
         df = spinner("Leyendo CSVs...", load_historical_data, base)
@@ -295,8 +295,8 @@ def _cargar_actual():
                 set_actual(df, caches[int(op)-1]["path"])
                 ok("Actual cargado desde caché."); pausar(); return
 
-    path = input(col("  Ruta [2022-2026/air_quality_historical.csv]: ", "YELLOW")).strip() \
-           or "2022-2026/air_quality_historical.csv"
+    path = input(col("  Ruta [../datasets/2022-2026/air_quality_historical.csv]: ", "YELLOW")).strip() \
+           or "../datasets/2022-2026/air_quality_historical.csv"
     try:
         df = spinner("Leyendo CSV actual...", load_current_data, path)
         spinner("Indexando...", set_actual, df, path)

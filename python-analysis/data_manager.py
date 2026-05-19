@@ -137,7 +137,7 @@ SES = Sesion()
 #  CARGA DE DATOS HISTÓRICOS 2013-2017 (UCI)
 # ══════════════════════════════════════════════════════════════════
 
-def load_historical_data(base_path: str = "2013-2017/PRSA_Data_20130301-20170228",
+def load_historical_data(base_path: str = "../datasets/2013-2017/PRSA_Data_20130301-20170228",
                          stations:  Optional[list] = None) -> pd.DataFrame:
     """
     Carga los CSV individuales de cada estación (formato UCI PRSA).
@@ -208,7 +208,7 @@ def load_historical_data(base_path: str = "2013-2017/PRSA_Data_20130301-20170228
 #  CARGA DE DATOS ACTUALES 2022-2026 (Open-Meteo / API satelital)
 # ══════════════════════════════════════════════════════════════════
 
-def load_current_data(path: str = "2022-2026/air_quality_historical.csv") -> pd.DataFrame:
+def load_current_data(path: str = "../datasets/2022-2026/air_quality_historical.csv") -> pd.DataFrame:
     """
     Carga el CSV del período actual.
     Columnas mínimas esperadas: date, pm2_5
