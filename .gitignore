@@ -1,11 +1,11 @@
 .claude/
 node_modules/
-dist/*
+dist/
 .DS_Store
 *.log
 .env
 .env.local
-.vite/*
-.cache/*
+.vite/
+.cache/
 .aq_cache/
 __pycache__/
