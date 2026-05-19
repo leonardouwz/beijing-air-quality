@@ -21,7 +21,7 @@ from typing import Optional
 # ══════════════════════════════════════════════════════════════════
 
 # Features disponibles según el dataset histórico UCI
-FEATURES_HIST = ["PM2.5", "PM10", "SO2", "NO2", "CO", "O3",
+FEATURES_UCI = ["PM2.5", "PM10", "SO2", "NO2", "CO", "O3",
                  "TEMP", "PRES", "DEW", "WSPM"]
 
 # Features del dataset actual (solo PM2.5 garantizado)
@@ -278,14 +278,14 @@ def detectar_eventos_criticos(df, umbral: float = 150.0) -> list[dict]:
 
     col_fecha = "date" if "date" in df.columns else "datetime"
     agg = {c: "mean" for c in df.columns
-           if c in FEATURES_HIST and c in df.columns}
+           if c in FEATURES_UCI and c in df.columns}
     agg["PM2.5"] = "mean"
 
     criticos = []
     for (region, fecha), grp in df.groupby(["region", col_fecha]):
         pm25 = grp["PM2.5"].mean()
         if pm25 >= umbral:
-            vec_dict = {f: grp[f].mean() for f in FEATURES_HIST if f in grp.columns}
+            vec_dict = {f: grp[f].mean() for f in FEATURES_UCI if f in grp.columns}
             vec = np.array(list(vec_dict.values()), dtype=np.float64)
             criticos.append({
                 "station": region,
@@ -396,18 +396,31 @@ def predecir_pm25_knn(
     for s in names:
         sv = station_vecs[s]
         feats = sv.get("features", [])
+        # Solo usar las features que existen tanto en weather como en el vector
         idxs  = [feats.index(f) for f in weather if f in feats]
-        if idxs:
+        if len(idxs) > 0:
             vecs.append(sv["vec"][idxs])
             validos.append(s)
 
     if not vecs:
         return {"pm25_pred": None, "categoria": "Sin datos", "vecinos": []}
 
+    # Asegurar que target_vec tiene la misma dimensión que los vectores de la matriz
+    # target_vec viene en el orden [TEMP, PRES, DEW, WSPM]
+    # matrix tendrá el orden de las features que existen en el dataset
+    sample_sv = station_vecs[validos[0]]
+    sample_feats = sample_sv.get("features", [])
+    active_weather_idxs = [i for i, f in enumerate(weather) if f in sample_feats]
+    
+    if len(active_weather_idxs) != len(target_vec):
+        target_vec_aligned = target_vec[active_weather_idxs]
+    else:
+        target_vec_aligned = target_vec
+
     matrix = zscore_matrix(np.array(vecs, dtype=np.float64))
     fn     = METRICAS[metrica]
 
-    dists = [(fn(target_vec, matrix[i]), validos[i]) for i in range(len(matrix))]
+    dists = [(fn(target_vec_aligned, matrix[i]), validos[i]) for i in range(len(matrix))]
     dists.sort()
     top = dists[:k]
 

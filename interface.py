@@ -29,7 +29,7 @@ from data_manager import (
     exportar_resumen_estaciones, exportar_hipotesis,
 )
 from core import (
-    METRICAS, FORMULAS, FEATURES_HIST, PM25_THRESHOLDS,
+    METRICAS, FORMULAS, FEATURES_UCI, PM25_THRESHOLDS,
     build_station_vectors, build_month_vectors,
     knn_estaciones, knn_todas_metricas,
     detectar_eventos_criticos, knn_eventos_criticos,
