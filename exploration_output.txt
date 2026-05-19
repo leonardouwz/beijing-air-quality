@@ -1,0 +1,1039 @@
+
+[96m  Beijing Air Quality KNN v1.0.0 — iniciando...[0m
+[90m  Caché histórico encontrado (420,768 filas)[0m
+[93m  ¿Cargar automáticamente? [S/n]: [0m  [CACHE] Cargado: afc9188a9344.parquet  (420,768 registros)
+  [SES] Histórico listo: 12 estaciones | features: ['PM2.5', 'PM10', 'SO2', 'NO2', 'CO', 'O3', 'TEMP', 'PRES', 'WSPM']
+  [CACHE] Cargado: 7c11fb98ccb0.parquet  (1,294 registros)
+  [SES] Actual listo: 1 zona(s) | features: ['PM10', 'PM2.5', 'O3']
+
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[90m  ─── DATOS ──────────────────────────────────────────[0m
+[93m  [1][0m Gestión de Datos      [90m(carga CSV, caché, ETL, exportar)[0m
+[93m  [2][0m Configuración KNN     [90m(K, métrica, normalización, target)[0m
+
+[90m  ─── ANÁLISIS ────────────────────────────────────────[0m
+[93m  [3][0m KNN entre Estaciones  [90m(similitud, cruzado, features)[0m
+[93m  [4][0m Influencia Climática  [90m(viento, estacionalidad, eventos)[0m
+[93m  [5][0m Alertas de Riesgo     [90m(hospitales, tráfico, predicción)[0m
+
+[90m  ─── IA ──────────────────────────────────────────────[0m
+[93m  [6][0m Hipótesis de Valor    [90m(Claude API · predicción · alerta · comparación)[0m
+[93m  [7][0m Benchmark Métricas    [90m(velocidad, complejidad, hardware)[0m
+
+[91m  [0][0m Salir
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m[97m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  1. Gestión de Datos[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Cargar histórico 2013-2017  (CSVs UCI por estación)
+[93m  [2][0m Cargar actual 2022-2026     (CSV Open-Meteo/API)
+[93m  [3][0m Unificar ambos períodos
+[93m  [4][0m Estadísticas del dataset
+[93m  [5][0m Administrar caché  (Parquet)
+[93m  [6][0m Guardar estado  (.pkl)
+[93m  [7][0m Cargar estado   (.pkl)
+[93m  [8][0m Exportar CSV
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Estadísticas del Dataset[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m
+  ── Período 2013-2017 ──[0m
+  ─────────────────────────────────────────────
+  │ [96mMétrica             [0m │ [96mValor             [0m │
+  ─────────────────────────────────────────────
+  │ [96mRegistros[0m            │ [97m420,768[0m            │
+  │ [96mRegiones[0m             │ [97m12[0m                 │
+  │ [96mPM2.5 media[0m          │ [97m79.79 µg/m³[0m        │
+  │ [96mPM2.5 std[0m            │ [97m80.82 µg/m³[0m        │
+  │ [96mPM2.5 p25[0m            │ [97m20.0 µg/m³[0m         │
+  │ [96mPM2.5 p50[0m            │ [97m55.0 µg/m³[0m         │
+  │ [96mPM2.5 p95[0m            │ [97m242.0 µg/m³[0m        │
+  │ [96mPM2.5 max[0m            │ [97m999.0 µg/m³[0m        │
+  │ [96mDías críticos (>150)[0m │ [97m15.21%[0m             │
+  │ [96mRango temporal[0m       │ [97m1460 days, 0:00:00[0m │
+  ─────────────────────────────────────────────
+[96m[1m
+  ── Período 2022-2026 ──[0m
+  ─────────────────────────────────────────────
+  │ [96mMétrica             [0m │ [96mValor             [0m │
+  ─────────────────────────────────────────────
+  │ [96mRegistros[0m            │ [97m1,294[0m              │
+  │ [96mRegiones[0m             │ [97m1[0m                  │
+  │ [96mPM2.5 media[0m          │ [97m78.88 µg/m³[0m        │
+  │ [96mPM2.5 std[0m            │ [97m47.12 µg/m³[0m        │
+  │ [96mPM2.5 p25[0m            │ [97m45.69 µg/m³[0m        │
+  │ [96mPM2.5 p50[0m            │ [97m68.63 µg/m³[0m        │
+  │ [96mPM2.5 p95[0m            │ [97m175.94 µg/m³[0m       │
+  │ [96mPM2.5 max[0m            │ [97m295.98 µg/m³[0m       │
+  │ [96mDías críticos (>150)[0m │ [97m9.12%[0m              │
+  │ [96mRango temporal[0m       │ [97m1293 days, 0:00:00[0m │
+  ─────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  1. Gestión de Datos[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Cargar histórico 2013-2017  (CSVs UCI por estación)
+[93m  [2][0m Cargar actual 2022-2026     (CSV Open-Meteo/API)
+[93m  [3][0m Unificar ambos períodos
+[93m  [4][0m Estadísticas del dataset
+[93m  [5][0m Administrar caché  (Parquet)
+[93m  [6][0m Guardar estado  (.pkl)
+[93m  [7][0m Cargar estado   (.pkl)
+[93m  [8][0m Exportar CSV
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m
+  [96m⠋[0m  Unificando datasets...   
+  [96m⠙[0m  Unificando datasets...     [OK] Unificado: 422,062 registros | features compartidas: ['PM10', 'O3']
+
+  [96m⠹[0m  Unificando datasets...   
+  [92m✓[0m  Unificando datasets...                                
+[92m  ✓  Dataset unificado listo.[0m
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  1. Gestión de Datos[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Cargar histórico 2013-2017  (CSVs UCI por estación)
+[93m  [2][0m Cargar actual 2022-2026     (CSV Open-Meteo/API)
+[93m  [3][0m Unificar ambos períodos
+[93m  [4][0m Estadísticas del dataset
+[93m  [5][0m Administrar caché  (Parquet)
+[93m  [6][0m Guardar estado  (.pkl)
+[93m  [7][0m Cargar estado   (.pkl)
+[93m  [8][0m Exportar CSV
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[90m  ─── DATOS ──────────────────────────────────────────[0m
+[93m  [1][0m Gestión de Datos      [90m(carga CSV, caché, ETL, exportar)[0m
+[93m  [2][0m Configuración KNN     [90m(K, métrica, normalización, target)[0m
+
+[90m  ─── ANÁLISIS ────────────────────────────────────────[0m
+[93m  [3][0m KNN entre Estaciones  [90m(similitud, cruzado, features)[0m
+[93m  [4][0m Influencia Climática  [90m(viento, estacionalidad, eventos)[0m
+[93m  [5][0m Alertas de Riesgo     [90m(hospitales, tráfico, predicción)[0m
+
+[90m  ─── IA ──────────────────────────────────────────────[0m
+[93m  [6][0m Hipótesis de Valor    [90m(Claude API · predicción · alerta · comparación)[0m
+[93m  [7][0m Benchmark Métricas    [90m(velocidad, complejidad, hardware)[0m
+
+[91m  [0][0m Salir
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m[97m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  KNN — 2013-2017[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Aotizhongxin[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Aotizhongxin]: [0m[92m  ✓  Target: Aotizhongxin[0m
+[93m  K vecinos [5]: [0m
+[96m[1m  TARGET: Aotizhongxin[0m[90m  PM2.5=82.8 µg/m³  críticos=15.8%  p95=248.0[0m
+[90m  COSENO  |  1 − (u·v)/(‖u‖×‖v‖)  |  0.42 ms[0m
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [96m#[0m │ [96mEstación     [0m │ [96mDistancia[0m │ [96mSimilitud[0m │ [96m[Barra]         [0m │ [96mPM2.5 med [0m │ [96mCategoría          [0m │ [96m% Críticos[0m │
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [90m1[0m │ [96mGuanyuan[0m      │ [97m0.01430[0m   │ [92m98.6%[0m     │ [97m[95m███████████████[0m[90m░[0m[0m │ [93m82.9 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m15.5%[0m      │
+  │ [90m2[0m │ [96mWanshouxigong[0m │ [97m0.20908[0m   │ [92m82.7%[0m     │ [97m[95m█████████████[0m[90m░░░[0m[0m │ [93m85.0 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.3%[0m      │
+  │ [90m3[0m │ [96mNongzhanguan[0m  │ [97m0.22005[0m   │ [92m82.0%[0m     │ [97m[95m█████████████[0m[90m░░░[0m[0m │ [93m84.8 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.5%[0m      │
+  │ [90m4[0m │ [96mDongsi[0m        │ [97m0.25129[0m   │ [92m79.9%[0m     │ [97m[95m████████████[0m[90m░░░░[0m[0m │ [93m86.2 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.9%[0m      │
+  │ [90m5[0m │ [96mWanliu[0m        │ [97m0.28982[0m   │ [92m77.5%[0m     │ [97m[95m████████████[0m[90m░░░░[0m[0m │ [93m83.4 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.1%[0m      │
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  KNN — 2013-2017[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Aotizhongxin[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Aotizhongxin]: [0m[92m  ✓  Target: Gucheng[0m
+[93m  K vecinos [5]: [0m
+[96m[1m  TARGET: Gucheng[0m[90m  PM2.5=83.9 µg/m³  críticos=15.6%  p95=247.0[0m
+[90m  COSENO  |  1 − (u·v)/(‖u‖×‖v‖)  |  0.34 ms[0m
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [96m#[0m │ [96mEstación     [0m │ [96mDistancia[0m │ [96mSimilitud[0m │ [96m[Barra]         [0m │ [96mPM2.5 med [0m │ [96mCategoría          [0m │ [96m% Críticos[0m │
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [90m1[0m │ [96mWanliu[0m        │ [97m0.52357[0m   │ [92m65.6%[0m     │ [97m[95m██████████[0m[90m░░░░░░[0m[0m │ [93m83.4 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.1%[0m      │
+  │ [90m2[0m │ [96mWanshouxigong[0m │ [97m0.60167[0m   │ [92m62.4%[0m     │ [97m[95m█████████[0m[90m░░░░░░░[0m[0m │ [93m85.0 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.3%[0m      │
+  │ [90m3[0m │ [96mAotizhongxin[0m  │ [97m0.69261[0m   │ [92m59.1%[0m     │ [97m[95m█████████[0m[90m░░░░░░░[0m[0m │ [93m82.8 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m15.8%[0m      │
+  │ [90m4[0m │ [96mGuanyuan[0m      │ [97m0.72993[0m   │ [92m57.8%[0m     │ [97m[95m█████████[0m[90m░░░░░░░[0m[0m │ [93m82.9 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m15.5%[0m      │
+  │ [90m5[0m │ [96mDongsi[0m        │ [97m1.08692[0m   │ [92m47.9%[0m     │ [97m[95m███████[0m[90m░░░░░░░░░[0m[0m │ [93m86.2 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.9%[0m      │
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mGucheng[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  KNN — 2013-2017[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Gucheng[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Gucheng]: [0m[92m  ✓  Target: Wanshouxigong[0m
+[93m  K vecinos [5]: [0m
+[96m[1m  TARGET: Wanshouxigong[0m[90m  PM2.5=85.0 µg/m³  críticos=16.3%  p95=256.0[0m
+[90m  COSENO  |  1 − (u·v)/(‖u‖×‖v‖)  |  0.33 ms[0m
+
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [96m#[0m │ [96mEstación    [0m │ [96mDistancia[0m │ [96mSimilitud[0m │ [96m[Barra]         [0m │ [96mPM2.5 med [0m │ [96mCategoría          [0m │ [96m% Críticos[0m │
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [90m1[0m │ [96mDongsi[0m       │ [97m0.16606[0m   │ [92m85.8%[0m     │ [97m[95m█████████████[0m[90m░░░[0m[0m │ [93m86.2 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.9%[0m      │
+  │ [90m2[0m │ [96mGuanyuan[0m     │ [97m0.19181[0m   │ [92m83.9%[0m     │ [97m[95m█████████████[0m[90m░░░[0m[0m │ [93m82.9 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m15.5%[0m      │
+  │ [90m3[0m │ [96mAotizhongxin[0m │ [97m0.20908[0m   │ [92m82.7%[0m     │ [97m[95m█████████████[0m[90m░░░[0m[0m │ [93m82.8 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m15.8%[0m      │
+  │ [90m4[0m │ [96mNongzhanguan[0m │ [97m0.21402[0m   │ [92m82.4%[0m     │ [97m[95m█████████████[0m[90m░░░[0m[0m │ [93m84.8 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.5%[0m      │
+  │ [90m5[0m │ [96mWanliu[0m       │ [97m0.49746[0m   │ [92m66.8%[0m     │ [97m[95m██████████[0m[90m░░░░░░[0m[0m │ [93m83.4 µg/m³[0m │ [95mInsalubre sensibles[0m │ [91m16.1%[0m      │
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mWanshouxigong[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Comparación de Métricas KNN[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Wanshouxigong[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Wanshouxigong]: [0m[92m  ✓  Target: Aotizhongxin[0m
+[93m  K [5]: [0m
+
+  [92m✓[0m  Calculando todas las métricas...                                
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [96mMétrica   [0m │ [96mFórmula            [0m │ [96mVecino #1[0m │ [96mSim #1[0m │ [96mTop-3                                        [0m │ [96mTiempo  [0m │
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  │ [95mCOSENO[0m     │ [90m1 − (u·v)/(‖u‖×‖v‖)[0m │ [96mGuanyuan[0m  │ [92m98.6%[0m  │ [97mGuanyuan(99%), Wanshouxigong(83%), Nongzhangu[0m │ [93m0.385 ms[0m │
+  │ [95mPEARSON[0m    │ [90m1 − r(u,v)[0m          │ [96mGuanyuan[0m  │ [92m97.6%[0m  │ [97mGuanyuan(98%), Wanliu(94%), Wanshouxigong(68%[0m │ [93m0.882 ms[0m │
+  │ [95mMANHATTAN[0m  │ [90mΣ|ui−vi|[0m            │ [96mGuanyuan[0m  │ [92m64.8%[0m  │ [97mGuanyuan(65%), Wanshouxigong(26%), Nongzhangu[0m │ [93m0.287 ms[0m │
+  │ [95mEUCLIDIANA[0m │ [90m√Σ(ui−vi)²[0m          │ [96mGuanyuan[0m  │ [92m80.6%[0m  │ [97mGuanyuan(81%), Wanshouxigong(46%), Nongzhangu[0m │ [93m0.254 ms[0m │
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  KNN Cruzado Histórico ↔ Actual[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m  ►  Para cada estación histórica busca su análogo más similar en el período actual.[0m
+
+  ────────────────────────────────────────────────────────────────────────────────────
+  │ [96mEstación Hist.[0m │ [96mPM2.5 hist[0m │ [96mAnálogo Actual[0m │ [96mPM2.5 actual[0m │ [96mSimilitud[0m │ [96mΔ     [0m │
+  ────────────────────────────────────────────────────────────────────────────────────
+  │ [96mAotizhongxin[0m   │ [93m82.8[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m20.4%[0m     │ [92m[92m↓4.7%[0m[0m  │
+  │ [96mChangping[0m      │ [93m71.1[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m11.4%[0m     │ [92m[91m↑10.9%[0m[0m │
+  │ [96mDingling[0m       │ [93m66.0[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m7.2%[0m      │ [92m[91m↑19.5%[0m[0m │
+  │ [96mDongsi[0m         │ [93m86.2[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m12.0%[0m     │ [92m[92m↓8.5%[0m[0m  │
+  │ [96mGuanyuan[0m       │ [93m82.9[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m19.8%[0m     │ [92m[92m↓4.9%[0m[0m  │
+  │ [96mGucheng[0m        │ [93m83.9[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m16.7%[0m     │ [92m[92m↓5.9%[0m[0m  │
+  │ [96mHuairou[0m        │ [93m69.6[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m9.8%[0m      │ [92m[91m↑13.3%[0m[0m │
+  │ [96mNongzhanguan[0m   │ [93m84.8[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m14.4%[0m     │ [92m[92m↓7.0%[0m[0m  │
+  │ [96mShunyi[0m         │ [93m79.5[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m62.0%[0m     │ [92m[92m↓0.8%[0m[0m  │
+  │ [96mTiantan[0m        │ [93m82.2[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m23.3%[0m     │ [92m[92m↓4.0%[0m[0m  │
+  │ [96mWanliu[0m         │ [93m83.4[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m18.2%[0m     │ [92m[92m↓5.4%[0m[0m  │
+  │ [96mWanshouxigong[0m  │ [93m85.0[0m       │ [92mBeijing[0m        │ [93m78.9[0m         │ [97m14.0%[0m     │ [92m[92m↓7.2%[0m[0m  │
+  ────────────────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Historial KNN (últimas 10 consultas)[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  ───────────────────────────────────────────────────────────────────
+  │ [96m#[0m │ [96mTarget       [0m │ [96mPeríodo  [0m │ [96mMétrica[0m │ [96mK[0m │ [96mVecino #1[0m │ [96mSim  [0m │
+  ───────────────────────────────────────────────────────────────────
+  │ [90m1[0m │ [96mAotizhongxin[0m  │ [95m2013-2017[0m │ [93mCOSENO[0m  │ [97m5[0m │ [92mGuanyuan[0m  │ [92m98.6%[0m │
+  │ [90m2[0m │ [96mGucheng[0m       │ [95m2013-2017[0m │ [93mCOSENO[0m  │ [97m5[0m │ [92mWanliu[0m    │ [92m65.6%[0m │
+  │ [90m3[0m │ [96mWanshouxigong[0m │ [95m2013-2017[0m │ [93mCOSENO[0m  │ [97m5[0m │ [92mDongsi[0m    │ [92m85.8%[0m │
+  ───────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  3. KNN entre Estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m KNN — período histórico 2013-2017
+[93m  [2][0m KNN — período actual 2022-2026
+[93m  [3][0m Comparar todas las métricas
+[93m  [4][0m KNN cruzado (hist ↔ actual)
+[93m  [5][0m Seleccionar features activos
+[93m  [6][0m Historial de consultas KNN
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[90m  ─── DATOS ──────────────────────────────────────────[0m
+[93m  [1][0m Gestión de Datos      [90m(carga CSV, caché, ETL, exportar)[0m
+[93m  [2][0m Configuración KNN     [90m(K, métrica, normalización, target)[0m
+
+[90m  ─── ANÁLISIS ────────────────────────────────────────[0m
+[93m  [3][0m KNN entre Estaciones  [90m(similitud, cruzado, features)[0m
+[93m  [4][0m Influencia Climática  [90m(viento, estacionalidad, eventos)[0m
+[93m  [5][0m Alertas de Riesgo     [90m(hospitales, tráfico, predicción)[0m
+
+[90m  ─── IA ──────────────────────────────────────────────[0m
+[93m  [6][0m Hipótesis de Valor    [90m(Claude API · predicción · alerta · comparación)[0m
+[93m  [7][0m Benchmark Métricas    [90m(velocidad, complejidad, hardware)[0m
+
+[91m  [0][0m Salir
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m[97m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  4. Influencia Climática[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Correlación viento ↔ PM2.5 por estación
+[93m  [2][0m Perfil estacional (invierno/verano/etc.)
+[93m  [3][0m Eventos críticos y similitud KNN entre días
+[93m  [4][0m Comparativa estacional hist. vs actual
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Correlación Viento ↔ PM2.5[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+
+  [96m⠋[0m  Calculando correlaciones...   
+  [96m⠙[0m  Calculando correlaciones...   
+  [96m⠹[0m  Calculando correlaciones...   
+  [92m✓[0m  Calculando correlaciones...                                
+  ────────────────────────────────────────────────────────────────────────────────────────
+  │ [96mEstación     [0m │ [96mCorr. Pearson[0m │ [96mEfecto    [0m │ [96mInterpretación                         [0m │
+  ────────────────────────────────────────────────────────────────────────────────────────
+  │ [96mDongsi[0m        │ [93m-0.3015[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mNongzhanguan[0m  │ [93m-0.3010[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mWanshouxigong[0m │ [93m-0.2983[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mTiantan[0m       │ [93m-0.2910[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mGuanyuan[0m      │ [93m-0.2843[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mAotizhongxin[0m  │ [93m-0.2787[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mChangping[0m     │ [93m-0.2729[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mShunyi[0m        │ [93m-0.2708[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mDingling[0m      │ [93m-0.2557[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mGucheng[0m       │ [93m-0.2523[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mWanliu[0m        │ [93m-0.2442[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  │ [96mHuairou[0m       │ [93m-0.2204[0m       │ [97m[92m↓ dispersa[0m[0m │ [90mModerada negativa — viento reduce PM2.5[0m │
+  ────────────────────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  4. Influencia Climática[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Correlación viento ↔ PM2.5 por estación
+[93m  [2][0m Perfil estacional (invierno/verano/etc.)
+[93m  [3][0m Eventos críticos y similitud KNN entre días
+[93m  [4][0m Comparativa estacional hist. vs actual
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Perfil Estacional por Estación[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Aotizhongxin[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Aotizhongxin]: [0m[92m  ✓  Target: Aotizhongxin[0m
+
+[96m[1m  PM2.5 promedio por estación del año — Aotizhongxin[0m
+  Invierno   [[95m██████████████████████████████[0m[90m[0m] [93m96.4[0m µg/m³  (Insalubre sensibles)
+  Otoño      [[95m██████████████████████████[0m[90m░░░░[0m] [93m86.6[0m µg/m³  (Insalubre sensibles)
+  Primavera  [[95m█████████████████████████[0m[90m░░░░░[0m] [93m81.2[0m µg/m³  (Insalubre sensibles)
+  Verano     [[95m█████████████████████[0m[90m░░░░░░░░░[0m] [93m67.6[0m µg/m³  (Moderado)
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  4. Influencia Climática[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Correlación viento ↔ PM2.5 por estación
+[93m  [2][0m Perfil estacional (invierno/verano/etc.)
+[93m  [3][0m Eventos críticos y similitud KNN entre días
+[93m  [4][0m Comparativa estacional hist. vs actual
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Perfil Estacional por Estación[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Aotizhongxin[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Aotizhongxin]: [0m[92m  ✓  Target: Gucheng[0m
+
+[96m[1m  PM2.5 promedio por estación del año — Gucheng[0m
+  Invierno   [[95m██████████████████████████████[0m[90m[0m] [93m100.6[0m µg/m³  (Insalubre sensibles)
+  Otoño      [[95m██████████████████████████[0m[90m░░░░[0m] [93m88.2[0m µg/m³  (Insalubre sensibles)
+  Primavera  [[95m████████████████████████[0m[90m░░░░░░[0m] [93m80.7[0m µg/m³  (Insalubre sensibles)
+  Verano     [[95m███████████████████[0m[90m░░░░░░░░░░░[0m] [93m66.2[0m µg/m³  (Moderado)
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  4. Influencia Climática[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mGucheng[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Correlación viento ↔ PM2.5 por estación
+[93m  [2][0m Perfil estacional (invierno/verano/etc.)
+[93m  [3][0m Eventos críticos y similitud KNN entre días
+[93m  [4][0m Comparativa estacional hist. vs actual
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Eventos Críticos — PM2.5 > 150 µg/m³[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[93m  Umbral PM2.5 [150]: [0m
+  [96m⠋[0m  Detectando eventos...   
+  [96m⠙[0m  Detectando eventos...   
+  [96m⠹[0m  Detectando eventos...   
+  [96m⠸[0m  Detectando eventos...   
+  [96m⠼[0m  Detectando eventos...   
+  [96m⠴[0m  Detectando eventos...   
+  [96m⠦[0m  Detectando eventos...   
+  [96m⠧[0m  Detectando eventos...   
+  [96m⠇[0m  Detectando eventos...   
+  [96m⠏[0m  Detectando eventos...   
+  [96m⠋[0m  Detectando eventos...   
+  [96m⠙[0m  Detectando eventos...   
+  [96m⠹[0m  Detectando eventos...   
+  [96m⠸[0m  Detectando eventos...   
+  [96m⠼[0m  Detectando eventos...   
+  [96m⠴[0m  Detectando eventos...   
+  [96m⠦[0m  Detectando eventos...   
+  [96m⠧[0m  Detectando eventos...   
+  [96m⠇[0m  Detectando eventos...   
+  [96m⠏[0m  Detectando eventos...   
+  [96m⠋[0m  Detectando eventos...   
+  [96m⠙[0m  Detectando eventos...   
+  [96m⠹[0m  Detectando eventos...   
+  [96m⠸[0m  Detectando eventos...   
+  [96m⠼[0m  Detectando eventos...   
+  [96m⠴[0m  Detectando eventos...   
+  [96m⠦[0m  Detectando eventos...   
+  [96m⠧[0m  Detectando eventos...   
+  [92m✓[0m  Detectando eventos...                                
+[96m  ►  Encontrados 2204 eventos críticos.[0m
+  ───────────────────────────────────────────────────────
+  │ [96m# [0m │ [96mEstación     [0m │ [96mFecha     [0m │ [96mPM2.5[0m │ [96mCategoría[0m │
+  ───────────────────────────────────────────────────────
+  │ [90m1[0m  │ [96mDongsi[0m        │ [97m2015-12-25[0m │ [91m567.4[0m │ [95mPeligroso[0m │
+  │ [90m2[0m  │ [96mWanshouxigong[0m │ [97m2015-12-25[0m │ [91m536.6[0m │ [95mPeligroso[0m │
+  │ [90m3[0m  │ [96mGuanyuan[0m      │ [97m2015-12-25[0m │ [91m536.1[0m │ [95mPeligroso[0m │
+  │ [90m4[0m  │ [96mGucheng[0m       │ [97m2015-12-01[0m │ [91m519.8[0m │ [95mPeligroso[0m │
+  │ [90m5[0m  │ [96mShunyi[0m        │ [97m2015-12-01[0m │ [91m514.6[0m │ [95mPeligroso[0m │
+  │ [90m6[0m  │ [96mNongzhanguan[0m  │ [97m2015-12-25[0m │ [91m514.0[0m │ [95mPeligroso[0m │
+  │ [90m7[0m  │ [96mAotizhongxin[0m  │ [97m2015-12-25[0m │ [91m512.3[0m │ [95mPeligroso[0m │
+  │ [90m8[0m  │ [96mDongsi[0m        │ [97m2015-12-01[0m │ [91m506.0[0m │ [95mPeligroso[0m │
+  │ [90m9[0m  │ [96mGuanyuan[0m      │ [97m2015-12-01[0m │ [91m502.6[0m │ [95mPeligroso[0m │
+  │ [90m10[0m │ [96mTiantan[0m       │ [97m2015-12-25[0m │ [91m499.3[0m │ [95mPeligroso[0m │
+  │ [90m11[0m │ [96mGucheng[0m       │ [97m2017-01-01[0m │ [91m498.6[0m │ [95mPeligroso[0m │
+  │ [90m12[0m │ [96mAotizhongxin[0m  │ [97m2015-12-01[0m │ [91m493.6[0m │ [95mPeligroso[0m │
+  │ [90m13[0m │ [96mGuanyuan[0m      │ [97m2017-01-01[0m │ [91m493.5[0m │ [95mPeligroso[0m │
+  │ [90m14[0m │ [96mDongsi[0m        │ [97m2017-01-01[0m │ [91m487.2[0m │ [95mPeligroso[0m │
+  │ [90m15[0m │ [96mGucheng[0m       │ [97m2015-12-25[0m │ [91m485.9[0m │ [95mPeligroso[0m │
+  ───────────────────────────────────────────────────────
+
+[93m  Analizar evento # (1-15) [1]: [0m[93m  K eventos similares [3]: [0m
+[96m[1m  Eventos similares al #1 (Dongsi 2015-12-25):[0m
+  ──────────────────────────────────────────────────────
+  │ [96m#[0m │ [96mEstación     [0m │ [96mFecha     [0m │ [96mPM2.5[0m │ [96mSimilitud[0m │
+  ──────────────────────────────────────────────────────
+  │ [90m1[0m │ [96mWanshouxigong[0m │ [97m2015-12-25[0m │ [91m536.6[0m │ [92m0.0%[0m      │
+  │ [90m2[0m │ [96mGuanyuan[0m      │ [97m2015-12-25[0m │ [91m536.1[0m │ [92m0.0%[0m      │
+  │ [90m3[0m │ [96mGucheng[0m       │ [97m2015-12-01[0m │ [91m519.8[0m │ [92m0.0%[0m      │
+  ──────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  4. Influencia Climática[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mGucheng[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Correlación viento ↔ PM2.5 por estación
+[93m  [2][0m Perfil estacional (invierno/verano/etc.)
+[93m  [3][0m Eventos críticos y similitud KNN entre días
+[93m  [4][0m Comparativa estacional hist. vs actual
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Comparativa Estacional Hist. vs Actual[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Gucheng[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Gucheng]: [0m[92m  ✓  Target: Aotizhongxin[0m
+
+[96m[1m  Aotizhongxin — PM2.5 por estación del año[0m
+  ────────────────────────────────────────────────────────
+  │ [96mEstación [0m │ [96mPM2.5 2013-17[0m │ [96mPM2.5 2022-26[0m │ [96mΔ mejora[0m │
+  ────────────────────────────────────────────────────────
+  │ [95mInvierno[0m  │ [93m96.4[0m          │ [92m104.9[0m         │ [97m[91m↑8.8%[0m[0m    │
+  │ [95mPrimavera[0m │ [93m81.2[0m          │ [92m56.6[0m          │ [97m[92m↓30.3%[0m[0m   │
+  │ [95mVerano[0m    │ [93m67.6[0m          │ [92m62.1[0m          │ [97m[92m↓8.1%[0m[0m    │
+  │ [95mOtoño[0m     │ [93m86.6[0m          │ [92m84.8[0m          │ [97m[92m↓2.1%[0m[0m    │
+  ────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  4. Influencia Climática[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Correlación viento ↔ PM2.5 por estación
+[93m  [2][0m Perfil estacional (invierno/verano/etc.)
+[93m  [3][0m Eventos críticos y similitud KNN entre días
+[93m  [4][0m Comparativa estacional hist. vs actual
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[90m  ─── DATOS ──────────────────────────────────────────[0m
+[93m  [1][0m Gestión de Datos      [90m(carga CSV, caché, ETL, exportar)[0m
+[93m  [2][0m Configuración KNN     [90m(K, métrica, normalización, target)[0m
+
+[90m  ─── ANÁLISIS ────────────────────────────────────────[0m
+[93m  [3][0m KNN entre Estaciones  [90m(similitud, cruzado, features)[0m
+[93m  [4][0m Influencia Climática  [90m(viento, estacionalidad, eventos)[0m
+[93m  [5][0m Alertas de Riesgo     [90m(hospitales, tráfico, predicción)[0m
+
+[90m  ─── IA ──────────────────────────────────────────────[0m
+[93m  [6][0m Hipótesis de Valor    [90m(Claude API · predicción · alerta · comparación)[0m
+[93m  [7][0m Benchmark Métricas    [90m(velocidad, complejidad, hardware)[0m
+
+[91m  [0][0m Salir
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m[97m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  5. Alertas de Riesgo[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Generar alertas por estación
+[93m  [2][0m Predicción PM2.5 con KNN (condiciones actuales)
+[93m  [3][0m Comparativa períodos — ranking de criticidad
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Alertas por Estación[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[93m  % días críticos para CRÍTICO [20]: [0m[92m  ✓  Ninguna estación supera el umbral de alerta.[0m
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  5. Alertas de Riesgo[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Generar alertas por estación
+[93m  [2][0m Predicción PM2.5 con KNN (condiciones actuales)
+[93m  [3][0m Comparativa períodos — ranking de criticidad
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Predicción KNN de PM2.5[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m  ►  Ingresa condiciones meteorológicas actuales para predecir PM2.5.[0m
+
+[93m  TEMP (°C) [15]: [0m[93m  PRES (hPa) [1010]: [0m[93m  DEW — Punto de rocío (°C) [5]: [0m[93m  WSPM — Velocidad viento (m/s) [2]: [0m
+[1m[97m  PM2.5 PREDICHO: 82.6 µg/m³[0m
+[93m  Categoría: Insalubre sensibles[0m
+
+[90m  Basado en estaciones similares:[0m
+    [96mGuanyuan[0m  PM2.5 histórico=82.9  dist=0.0498
+    [96mAotizhongxin[0m  PM2.5 histórico=82.8  dist=0.0498
+    [96mShunyi[0m  PM2.5 histórico=79.5  dist=0.1405
+    [96mDongsi[0m  PM2.5 histórico=86.2  dist=0.2960
+    [96mTiantan[0m  PM2.5 histórico=82.2  dist=0.2960
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  5. Alertas de Riesgo[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Generar alertas por estación
+[93m  [2][0m Predicción PM2.5 con KNN (condiciones actuales)
+[93m  [3][0m Comparativa períodos — ranking de criticidad
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Ranking de Criticidad — Histórico vs Actual[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  ──────────────────────────────────────────────────────────────────────
+  │ [96mEstación     [0m │ [96mPM2.5 med[0m │ [96m% Críticos[0m │ [96m% Mod.[0m │ [96mp95  [0m │ [96mΔ actual[0m │
+  ──────────────────────────────────────────────────────────────────────
+  │ [96mDongsi[0m        │ [93m86.2[0m      │ [91m16.9%[0m      │ [93m25.0%[0m  │ [95m260.0[0m │ [92m[92m↓8%[0m[0m      │
+  │ [96mNongzhanguan[0m  │ [93m84.8[0m      │ [91m16.5%[0m      │ [93m24.3%[0m  │ [95m260.0[0m │ [92m[92m↓7%[0m[0m      │
+  │ [96mWanshouxigong[0m │ [93m85.0[0m      │ [91m16.3%[0m      │ [93m25.0%[0m  │ [95m256.0[0m │ [92m[92m↓7%[0m[0m      │
+  │ [96mWanliu[0m        │ [93m83.4[0m      │ [91m16.1%[0m      │ [93m24.9%[0m  │ [95m247.0[0m │ [92m[92m↓5%[0m[0m      │
+  │ [96mAotizhongxin[0m  │ [93m82.8[0m      │ [91m15.8%[0m      │ [93m24.4%[0m  │ [95m248.0[0m │ [92m[92m↓5%[0m[0m      │
+  │ [96mTiantan[0m       │ [93m82.2[0m      │ [91m15.6%[0m      │ [93m24.7%[0m  │ [95m243.7[0m │ [92m[92m↓4%[0m[0m      │
+  │ [96mGucheng[0m       │ [93m83.9[0m      │ [91m15.6%[0m      │ [93m25.5%[0m  │ [95m247.0[0m │ [92m[92m↓6%[0m[0m      │
+  │ [96mGuanyuan[0m      │ [93m82.9[0m      │ [91m15.5%[0m      │ [93m25.6%[0m  │ [95m243.0[0m │ [92m[92m↓5%[0m[0m      │
+  │ [96mShunyi[0m        │ [93m79.5[0m      │ [91m14.9%[0m      │ [93m23.5%[0m  │ [95m242.0[0m │ [92m[92m↓1%[0m[0m      │
+  │ [96mChangping[0m     │ [93m71.1[0m      │ [91m12.5%[0m      │ [93m21.8%[0m  │ [95m222.0[0m │ [92m[92m↓-11%[0m[0m    │
+  │ [96mHuairou[0m       │ [93m69.6[0m      │ [91m11.7%[0m      │ [93m21.7%[0m  │ [95m216.0[0m │ [92m[92m↓-13%[0m[0m    │
+  │ [96mDingling[0m      │ [93m66.0[0m      │ [91m11.4%[0m      │ [93m19.7%[0m  │ [95m215.0[0m │ [92m[92m↓-20%[0m[0m    │
+  ──────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  5. Alertas de Riesgo[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Generar alertas por estación
+[93m  [2][0m Predicción PM2.5 con KNN (condiciones actuales)
+[93m  [3][0m Comparativa períodos — ranking de criticidad
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[90m  ─── DATOS ──────────────────────────────────────────[0m
+[93m  [1][0m Gestión de Datos      [90m(carga CSV, caché, ETL, exportar)[0m
+[93m  [2][0m Configuración KNN     [90m(K, métrica, normalización, target)[0m
+
+[90m  ─── ANÁLISIS ────────────────────────────────────────[0m
+[93m  [3][0m KNN entre Estaciones  [90m(similitud, cruzado, features)[0m
+[93m  [4][0m Influencia Climática  [90m(viento, estacionalidad, eventos)[0m
+[93m  [5][0m Alertas de Riesgo     [90m(hospitales, tráfico, predicción)[0m
+
+[90m  ─── IA ──────────────────────────────────────────────[0m
+[93m  [6][0m Hipótesis de Valor    [90m(Claude API · predicción · alerta · comparación)[0m
+[93m  [7][0m Benchmark Métricas    [90m(velocidad, complejidad, hardware)[0m
+
+[91m  [0][0m Salir
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m[97m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  7. Benchmark de Métricas[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Benchmark de velocidad  (todas las métricas)
+[93m  [2][0m Tabla de complejidad teórica
+[93m  [3][0m Info de hardware
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Benchmark de Velocidad[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m  Target actual: Aotizhongxin[0m
+[2m  [1]Aotiz  [2]Chang  [3]Dingl  [4]Dongs  [5]Guany  [6]Guche  [7]Huair  [8]Nongz  [9]Shuny  [10]Tiant  [11]Wanli  [12]Wansh[0m
+[93m  Cambiar target? [Enter=Aotizhongxin]: [0m[92m  ✓  Target: Aotizhongxin[0m
+[93m  Repeticiones [5]: [0m
+  [92m✓[0m  Ejecutando benchmark...                                
+  ───────────────────────────────────────────────────────────────────────────
+  │ [96mMétrica   [0m │ [96mFórmula            [0m │ [96mTiempo promedio[0m │ [96mVecino #1[0m │ [96mSim #1[0m │
+  ───────────────────────────────────────────────────────────────────────────
+  │ [95mCOSENO[0m     │ [90m1 − (u·v)/(‖u‖×‖v‖)[0m │ [93m0.306 ms[0m        │ [96mGuanyuan[0m  │ [92m98.6%[0m  │
+  │ [95mPEARSON[0m    │ [90m1 − r(u,v)[0m          │ [93m0.746 ms[0m        │ [96mGuanyuan[0m  │ [92m97.6%[0m  │
+  │ [95mMANHATTAN[0m  │ [90mΣ|ui−vi|[0m            │ [93m0.235 ms[0m        │ [96mGuanyuan[0m  │ [92m64.8%[0m  │
+  │ [95mEUCLIDIANA[0m │ [90m√Σ(ui−vi)²[0m          │ [93m0.234 ms[0m        │ [96mGuanyuan[0m  │ [92m80.6%[0m  │
+  ───────────────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  7. Benchmark de Métricas[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Benchmark de velocidad  (todas las métricas)
+[93m  [2][0m Tabla de complejidad teórica
+[93m  [3][0m Info de hardware
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Complejidad Teórica[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  ────────────────────────────────────────────────────────────────────────────────────────
+  │ [96mMétrica   [0m │ [96m1 estación[0m │ [96mTodas vs todas[0m │ [96mOps (1 vs N)[0m │ [96mNotas                     [0m │
+  ────────────────────────────────────────────────────────────────────────────────────────
+  │ [95mCoseno[0m     │ [92mO(N×M)[0m     │ [91mO(N²×M)[0m        │ [93m108[0m          │ [90mProducto punto + normas[0m    │
+  │ [95mPearson[0m    │ [92mO(N×M)[0m     │ [91mO(N²×M)[0m        │ [93m108[0m          │ [90mMedia y varianza por par[0m   │
+  │ [95mManhattan[0m  │ [92mO(N×M)[0m     │ [91mO(N²×M)[0m        │ [93m108[0m          │ [90mSuma diferencias absolutas[0m │
+  │ [95mEuclidiana[0m │ [92mO(N×M)[0m     │ [91mO(N²×M)[0m        │ [93m108[0m          │ [90mRaíz suma cuadrados[0m        │
+  ────────────────────────────────────────────────────────────────────────────────────────
+[96m  ►  Dataset actual: 12 estaciones × 9 features → 108 ops por consulta[0m
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  7. Benchmark de Métricas[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Benchmark de velocidad  (todas las métricas)
+[93m  [2][0m Tabla de complejidad teórica
+[93m  [3][0m Info de hardware
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  Hardware del Sistema[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  ──────────────────────────────────────────────────────────────────
+  │ [96mComponente[0m │ [96mDetalle                                          [0m │
+  ──────────────────────────────────────────────────────────────────
+  │ [96mCPU[0m        │ [97mAMD64 Family 25 Model 80 Stepping 0, AuthenticAMD[0m │
+  │ [96mCores[0m      │ [97m12[0m                                                │
+  │ [96mRAM total[0m  │ [97m15.4 GB[0m                                           │
+  │ [96mRAM usada[0m  │ [97m13.0 GB (84.6%)[0m                                   │
+  │ [96mOS[0m         │ [97mWindows 11[0m                                        │
+  │ [96mPython[0m     │ [97m3.13.5 (tags/v3.13.5:6cb20a2, Jun 11 202[0m          │
+  │ [96mNumPy[0m      │ [97m2.4.4[0m                                             │
+  │ [96mPandas[0m     │ [97m3.0.2[0m                                             │
+  ──────────────────────────────────────────────────────────────────
+
+[2m  Presiona Enter para continuar...[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[96m[1m  7. Benchmark de Métricas[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[93m  [1][0m Benchmark de velocidad  (todas las métricas)
+[93m  [2][0m Tabla de complejidad teórica
+[93m  [3][0m Info de hardware
+[90m  [0][0m Volver
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m  Opción: [0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[95m║[0m[1m[97m   🌫️  Beijing Air Quality — KNN entre Estaciones  v1.0.0   [0m[95m║[0m
+[95m════════════════════════════════════════════════════════════════════════════[0m
+[90m  Dominio: [0m[96mInteligencia de Negocios · Salud Pública · Sostenibilidad Ambiental[0m
+[90m  Dataset: [0m[96mUCI 2013-2017  +  Open-Meteo/Satelital 2022-2026  ·  12 estaciones[0m
+[90m────────────────────────────────────────────────────────────────────────────[0m
+  Histórico [92m✓[0m  Actual [92m✓[0m    K=[93m5[0m  Métrica=[95mCOSENO[0m  Norm=[90mzscore[0m
+  2013-17: [96m420,768[0m registros  PM2.5 prom=[93m79.8[0m µg/m³  Target=[93mAotizhongxin[0m
+  2022-26: [96m1,294[0m registros  PM2.5 prom=[93m78.9[0m µg/m³  Mejora=[92m↓1.1%[0m
+
+[90m  ─── DATOS ──────────────────────────────────────────[0m
+[93m  [1][0m Gestión de Datos      [90m(carga CSV, caché, ETL, exportar)[0m
+[93m  [2][0m Configuración KNN     [90m(K, métrica, normalización, target)[0m
+
+[90m  ─── ANÁLISIS ────────────────────────────────────────[0m
+[93m  [3][0m KNN entre Estaciones  [90m(similitud, cruzado, features)[0m
+[93m  [4][0m Influencia Climática  [90m(viento, estacionalidad, eventos)[0m
+[93m  [5][0m Alertas de Riesgo     [90m(hospitales, tráfico, predicción)[0m
+
+[90m  ─── IA ──────────────────────────────────────────────[0m
+[93m  [6][0m Hipótesis de Valor    [90m(Claude API · predicción · alerta · comparación)[0m
+[93m  [7][0m Benchmark Métricas    [90m(velocidad, complejidad, hardware)[0m
+
+[91m  [0][0m Salir
+[90m────────────────────────────────────────────────────────────────────────────[0m
+[1m[97m  Opción: [0m
+[96m[1m  ¡Hasta luego![0m
+[90m  Universidad La Salle Arequipa — Ciencia de Datos[0m
+
