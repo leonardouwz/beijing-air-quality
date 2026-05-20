@@ -9,3 +9,4 @@ dist/
 .cache/
 .aq_cache/
 __pycache__/
+*.mjs
