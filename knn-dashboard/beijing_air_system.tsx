@@ -7,22 +7,22 @@ const STATIONS = ["Aotizhongxin","Changping","Dingling","Dongsi","Guanyuan",
   "Gucheng","Huairou","Nongzhanguan","Shunyi","Tiantan","Wanliu","Wanshouxigong"];
 
 const HIST_STATIONS_CSV = {
-  "Aotizhongxin":  "/2013-2017/PRSA_Data_Aotizhongxin_20130301-20170228.csv",
-  "Changping":     "/2013-2017/PRSA_Data_Changping_20130301-20170228.csv",
-  "Dingling":      "/2013-2017/PRSA_Data_Dingling_20130301-20170228.csv",
-  "Dongsi":        "/2013-2017/PRSA_Data_Dongsi_20130301-20170228.csv",
-  "Guanyuan":      "/2013-2017/PRSA_Data_Guanyuan_20130301-20170228.csv",
-  "Gucheng":       "/2013-2017/PRSA_Data_Gucheng_20130301-20170228.csv",
-  "Huairou":       "/2013-2017/PRSA_Data_Huairou_20130301-20170228.csv",
-  "Nongzhanguan":  "/2013-2017/PRSA_Data_Nongzhanguan_20130301-20170228.csv",
-  "Shunyi":        "/2013-2017/PRSA_Data_Shunyi_20130301-20170228.csv",
-  "Tiantan":       "/2013-2017/PRSA_Data_Tiantan_20130301-20170228.csv",
-  "Wanliu":        "/2013-2017/PRSA_Data_Wanliu_20130301-20170228.csv",
-  "Wanshouxigong": "/2013-2017/PRSA_Data_Wanshouxigong_20130301-20170228.csv",
+  "Aotizhongxin":  "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Aotizhongxin_20130301-20170228.csv",
+  "Changping":     "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Changping_20130301-20170228.csv",
+  "Dingling":      "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Dingling_20130301-20170228.csv",
+  "Dongsi":        "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Dongsi_20130301-20170228.csv",
+  "Guanyuan":      "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Guanyuan_20130301-20170228.csv",
+  "Gucheng":       "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Gucheng_20130301-20170228.csv",
+  "Huairou":       "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Huairou_20130301-20170228.csv",
+  "Nongzhanguan":  "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Nongzhanguan_20130301-20170228.csv",
+  "Shunyi":        "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Shunyi_20130301-20170228.csv",
+  "Tiantan":       "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Tiantan_20130301-20170228.csv",
+  "Wanliu":        "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Wanliu_20130301-20170228.csv",
+  "Wanshouxigong": "/datasets/2013-2017/PRSA_Data_20130301-20170228/PRSA_Data_Wanshouxigong_20130301-20170228.csv",
 };
-const CURR_CSV = "/2022-2026/air_quality_historical.csv";
+const CURR_CSV = "/datasets/2022-2026/air_quality_historical.csv";
 
-const FEATURES    = ["PM2.5","PM10","SO2","NO2","CO","O3","TEMP","PRES","DEW","WSPM"];
+const FEATURES    = ["PM2.5","PM10","SO₂","NO₂","CO","O₃","TEMP","PRES","DEW","WSPM"];
 const FEAT_LABELS = ["PM2.5","PM10","SO₂","NO₂","CO","O₃","Temp","Pres","Rocío","Viento"];
 const MONTHS      = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -99,6 +99,9 @@ const H8_AQI_DIST = [
 // ═══════════════════════════════════════════════════════════
 //  PARSING Y CARGA DE CSV
 // ═══════════════════════════════════════════════════════════
+// Tokens que se tratan como valores nulos/faltantes (igual que pandas errors="coerce")
+const NULL_TOKENS = new Set(["NA","na","NaN","nan","NaT","null","NULL","","undefined"]);
+
 function parseCSV(text) {
   const lines = text.trim().split("\n");
   if (!lines.length) return [];
@@ -110,8 +113,9 @@ function parseCSV(text) {
       const row = {};
       headers.forEach((h, j) => {
         let v = values[j].replace(/"/g, "").trim();
+        if (NULL_TOKENS.has(v)) { row[h] = null; return; }  // → null, no string "NA"
         const num = parseFloat(v);
-        row[h] = isNaN(num) ? v : num;
+        row[h] = isNaN(num) ? v : num;  // string para categoricas (wd, station)
       });
       rows.push(row);
     }
@@ -120,62 +124,77 @@ function parseCSV(text) {
 }
 
 function processHistStation(rows, stationName, stIdx) {
+  // pd.to_numeric(errors="coerce"): null/NA/NaN → null, número válido → número
+  const toNum = (v, fallback=null) => (v===null||v===undefined) ? fallback : (isNaN(+v) ? fallback : +v);
+
   return rows.map(r => {
-    const m = r.month;
-    const d = r.day || 1;
+    const m = toNum(r.month, 1);
+    const d = toNum(r.day, 1);
     const dayOfYear = Math.floor((m - 1) * 30.4 + d);
-    const pm25 = r["PM2.5"] ?? r["pm2_5"] ?? 0;
-    const pm10 = r["PM10"] ?? 0;
-    const so2  = r["SO2"]  ?? 0;
-    const no2  = r["NO2"]  ?? 0;
-    const co   = r["CO"]   ?? 0;
-    const o3   = r["O3"]   ?? 0;
-    const temp = r["TEMP"] ?? 0;
-    const pres = r["PRES"] ?? 0;
-    const dew  = r["DEWP"] ?? r["DEW"] ?? 0;
-    const wspm = r["WSPM"] ?? 0;
-    const rain = r["RAIN"] ?? 0;
-    const wd   = r["wd"]   ?? "N";
+    const pm25 = toNum(r["PM2.5"]) ?? toNum(r["pm2_5"]);
+    const pm10 = toNum(r["PM10"],  0);
+    const so2  = toNum(r["SO2"],   0);
+    const no2  = toNum(r["NO2"],   0);
+    const co   = toNum(r["CO"],    0);
+    const o3   = toNum(r["O3"],    0);
+    const temp = toNum(r["TEMP"],  null);  // null = ausente — toVec lo filtra automáticamente
+    const pres = toNum(r["PRES"],  null);
+    const dew  = toNum(r["DEWP"] ?? r["DEW"], null);
+    const wspm = toNum(r["WSPM"],  null);
+    const rain = toNum(r["RAIN"],  0);
+    const wd   = r["wd"] ?? "N";
     return {
       station:stationName, stIdx, period:"hist", month:m-1, day:dayOfYear, rain,
       "PM2.5":pm25, "PM10":pm10, "SO2":so2, "NO2":no2, "CO":co, "O3":o3,
       TEMP:temp, PRES:pres, DEW:dew, WSPM:wspm, RAIN:rain, wd,
-      critical:pm25>150, moderate:pm25>75&&pm25<=150
+      critical:(pm25||0)>150, moderate:(pm25||0)>75&&(pm25||0)<=150
     };
-  }).filter(r => r["PM2.5"]!=null && !isNaN(r["PM2.5"]));
+  }).filter(r => r["PM2.5"] !== null && !isNaN(r["PM2.5"]));
 }
 
 function processCurrData(rows) {
   return rows.map((r, idx) => {
-    const dateStr = r.date || "";
+    const dateStr = r.date || r.time || "";
     const dateMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
     const month = dateMatch ? parseInt(dateMatch[2]) - 1 : 0;
-    const pm25 = r["pm2_5"] ?? r["PM2.5"] ?? 0;
+    const pm25 = r["pm2_5"] ?? r["PM2.5"] ?? r["pm25"] ?? 0;
     const pm10 = r["pm10"]  ?? r["PM10"]  ?? 0;
     const co   = r["carbon_monoxide"]   ?? r["CO"]  ?? 0;
     const no2  = r["nitrogen_dioxide"]  ?? r["NO2"] ?? 0;
     const so2  = r["sulphur_dioxide"]   ?? r["SO2"] ?? 0;
     const o3   = r["ozone"] ?? r["O3"]  ?? 0;
+    // Map meteorological fields from Open-Meteo column names
+    const temp = r["temperature_2m"] ?? r["temperature"] ?? r["TEMP"] ?? 0;
+    const pres = r["surface_pressure"] ?? r["pressure_msl"] ?? r["PRES"] ?? 0;
+    const dew  = r["dewpoint_2m"] ?? r["dew_point_2m"] ?? r["DEWP"] ?? r["DEW"] ?? 0;
+    const wspm = r["windspeed_10m"] ?? r["wind_speed_10m"] ?? r["WSPM"] ?? 0;
+    const rain = r["precipitation"] ?? r["rain"] ?? r["RAIN"] ?? 0;
     return {
-      station:"Beijing", stIdx:0, period:"curr", month, day:idx, rain:0,
+      station:"Beijing", stIdx:0, period:"curr", month, day:idx, rain,
       "PM2.5":pm25, "PM10":pm10, "SO2":so2, "NO2":no2, "CO":co, "O3":o3,
-      TEMP:0, PRES:0, DEW:0, WSPM:0, RAIN:0, wd:"N",
+      TEMP:temp, PRES:pres, DEW:dew, WSPM:wspm, RAIN:rain, wd:"N",
       critical:pm25>150, moderate:pm25>75&&pm25<=150
     };
   }).filter(r => r["PM2.5"]!=null && !isNaN(r["PM2.5"]) && r["PM2.5"]>0);
 }
 
-async function loadAllData() {
+async function loadAllData(onProgress?: (pct:number)=>void) {
   const hist = [];
   const curr = [];
+  const totalSources = Object.keys(HIST_STATIONS_CSV).length + 1;
+  let done = 0;
+  const tick = () => { done++; onProgress?.(Math.round(done/totalSources*100)); };
+
   const loadPromises = Object.entries(HIST_STATIONS_CSV).map(async ([station, path], stIdx) => {
     try {
       const res = await fetch(path);
-      if (!res.ok) return [];
+      if (!res.ok) { tick(); return []; }
       const text = await res.text();
       const rows = parseCSV(text);
-      return processHistStation(rows, station, stIdx);
-    } catch (e) { return []; }
+      const result = processHistStation(rows, station, stIdx);
+      tick();
+      return result;
+    } catch (e) { tick(); return []; }
   });
   const histResults = await Promise.all(loadPromises);
   histResults.forEach(arr => hist.push(...arr));
@@ -188,6 +207,10 @@ async function loadAllData() {
       curr.push(...processCurrData(rows));
     }
   } catch (e) {}
+  tick(); // count curr CSV
+
+  // Keep original curr data (un-duplicated) for TabCompare
+  const currRaw = [...curr];
 
   let currWithStations = curr;
   if (curr.length > 0) {
@@ -212,7 +235,7 @@ async function loadAllData() {
       });
     });
   }
-  return { hist, curr: currWithStations };
+  return { hist, curr: currWithStations, currRaw };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -278,8 +301,15 @@ Genera exactamente 4 hipótesis de valor. Cada hipótesis debe cubrir uno de est
 4. COMPARACIÓN: Cambio estructural entre período 2013-2017 vs 2022-2026
 Formato JSON (array de 4 objetos):
 [{"id":1,"tipo":"prediccion","titulo":"...","hipotesis":"Si [condición] entonces [consecuencia] porque [mecanismo]","evidencia_knn":"Qué patrón KNN la respalda","accion":"Decisión concreta (quién, qué, cuándo)","impacto":"Alto/Medio/Bajo","confianza":0.0}]`;
+  const apiKey = (import.meta as any).env?.VITE_ANTHROPIC_API_KEY || "";
   const r = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1200,system:sys,messages:[{role:"user",content:prompt}]})
   });
   const d = await r.json();
@@ -340,9 +370,11 @@ function SectionTitle({children,sub}:{children:any;sub?:string}) {
     </div>);
 }
 
-// Barra vertical con tooltip
+// Barra vertical con tooltip y animación de entrada
 function VBar({data,color="#6366f1",h=140,valueKey="value",labelKey="label"}) {
-  const [tip,setTip] = useState(null);
+  const [tip,setTip]       = useState(null);
+  const [mounted,setMounted] = useState(false);
+  useEffect(()=>{ const t=setTimeout(()=>setMounted(true),60); return ()=>clearTimeout(t); },[]);
   const max = Math.max(...data.map(d=>d[valueKey]||0),1);
   return (
     <div style={{position:"relative"}} data-chart>
@@ -351,13 +383,13 @@ function VBar({data,color="#6366f1",h=140,valueKey="value",labelKey="label"}) {
       </div>}
       <div style={{display:"flex",alignItems:"flex-end",gap:3,height:h}}>
         {data.map((d,i)=>{
-          const bh = Math.max(4,((d[valueKey]||0)/max)*(h-20));
+          const bh = mounted ? Math.max(4,((d[valueKey]||0)/max)*(h-20)) : 0;
           const bc = d.color||color;
           return (
             <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}
               onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect(),pr=e.currentTarget.closest("[data-chart]").getBoundingClientRect();setTip({label:d[labelKey],val:(d[valueKey]||0).toFixed(1),x:r.left-pr.left+r.width/2});}}
               onMouseLeave={()=>setTip(null)}>
-              <div style={{width:"100%",height:bh,background:bc,borderRadius:"3px 3px 0 0",minWidth:4,transition:"height .5s",opacity:.88}}/>
+              <div style={{width:"100%",height:bh,background:bc,borderRadius:"3px 3px 0 0",minWidth:4,transition:"height .6s cubic-bezier(.34,1.56,.64,1)",opacity:.88}}/>
               <span style={{fontSize:9,color:C.muted,writingMode:"vertical-rl",transform:"rotate(180deg)",maxHeight:36,overflow:"hidden"}}>{d[labelKey]}</span>
             </div>);
         })}
@@ -978,13 +1010,31 @@ function TabKNN({data,profiles,results,target,setTarget,period,setPeriod,metric,
   const tgtCat     = pm25Cat(tgtProfile.vec[0]);
   const radarVecs  = [tgtProfile,...results.slice(0,2)].map(p=>(p.vec||FEATURES.map(()=>0)).slice(0,6));
   const radarColors= [C.pred,C.clima,C.good];
+
+  // El período actual (2022-26) proviene de UN ÚNICO punto de monitoreo (ciudad completa).
+  // Python usa FEATURES_CURR=["PM2.5"] y solo procesa 1 "estación" (Beijing).
+  // En el dashboard redistribuimos los datos x12 estaciones sintéticas con el MISMO valor →
+  // todos los perfiles son idénticos → KNN entre estaciones es inválido para curr.
+  const currDisabled = period === "curr";
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <Card>
+      {/* Nota metodológica crítica cuando se selecciona curr */}
+      {currDisabled && (
+        <div style={{background:"#7c3aed22",border:"1px solid #7c3aed66",borderRadius:10,padding:"12px 16px",fontSize:12,color:"#c4b5fd",lineHeight:1.7}}>
+          <b>⚠️ Limitación del período 2022-26:</b> El dataset Open-Meteo proporciona un único punto
+          de monitoreo para toda la ciudad de Beijing (sin datos por estación individual). El análisis
+          Python original usa <code style={{background:"#ffffff15",padding:"1px 5px",borderRadius:3}}>FEATURES_CURR = ["PM2.5"]</code> con
+          una sola región. <br/>Al distribuir los mismos datos en 12 estaciones sintéticas, todos los
+          perfiles son idénticos → el KNN entre estaciones <b>no tiene validez estadística</b>.<br/>
+          <b>Recomendación:</b> Usa el período <span style={{color:C.pred}}>2013-2017</span> para análisis KNN por estación. El período actual es válido solo para <i>comparativa temporal</i> (tab "Comparativa Períodos").
+        </div>
+      )}
+      <Card style={{opacity: currDisabled ? 0.6 : 1}}>
         <SectionTitle>Configuracion KNN</SectionTitle>
         <div style={{display:"flex",flexWrap:"wrap",gap:14,alignItems:"flex-end"}}>
           <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Periodo</div>
-            <select value={period} onChange={e=>setPeriod(e.target.value)}><option value="hist">2013-2017 Historico</option><option value="curr">2022-2026 Actual</option></select></div>
+            <select value={period} onChange={e=>setPeriod(e.target.value)}><option value="hist">2013-2017 Historico ✓</option><option value="curr">2022-2026 Actual ⚠️</option></select></div>
           <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Estacion Target</div>
             <select value={target} onChange={e=>setTarget(+e.target.value)}>{STATIONS.map((s,i)=><option key={i} value={i}>{s}</option>)}</select></div>
           <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Metrica</div>
@@ -1060,6 +1110,31 @@ function TabKNN({data,profiles,results,target,setTarget,period,setPeriod,metric,
     </div>);
 }
 
+// Agrupación de barras Hist vs Curr por mes (sin superposición)
+function GroupedMonthBars({mH,mC,fi,colorH,colorC,maxVal,h=110}) {
+  const [mounted,setMounted] = useState(false);
+  useEffect(()=>{ const t=setTimeout(()=>setMounted(true),80); return ()=>clearTimeout(t); },[]);
+  return (
+    <div style={{display:"flex",alignItems:"flex-end",gap:2,height:h+24}}>
+      {mH.map((m,idx)=>{
+        const vH = m.vec[fi] || 0;
+        const vC = (mC[idx]?.vec[fi]) || 0;
+        const bH = mounted ? Math.max(2,(vH/maxVal)*(h-4)) : 0;
+        const bC = mounted ? Math.max(2,(vC/maxVal)*(h-4)) : 0;
+        return (
+          <div key={idx} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <div style={{display:"flex",gap:1,alignItems:"flex-end",height:h-4}}>
+              <div title={`2013-17: ${vH.toFixed(1)}`}
+                style={{flex:1,height:bH,background:colorH,borderRadius:"2px 2px 0 0",minWidth:3,transition:"height .6s cubic-bezier(.34,1.56,.64,1)"}}/>
+              <div title={`2022-26: ${vC.toFixed(1)}`}
+                style={{flex:1,height:bC,background:colorC,borderRadius:"2px 2px 0 0",minWidth:3,transition:"height .6s cubic-bezier(.34,1.56,.64,1)"}}/>
+            </div>
+            <span style={{fontSize:8,color:C.muted,marginTop:2}}>{m.label}</span>
+          </div>);
+      })}
+    </div>);
+}
+
 // ── Tab Temporal ─────────────────────────────────────────────
 function TabTemporal({data}) {
   const [tempSt,setTempSt] = useState(0);
@@ -1098,20 +1173,26 @@ function TabTemporal({data}) {
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-        {[["PM2.5",0,C.bad],["Viento",9,C.clima]].map(([lb,fi,c])=>(
-          <Card key={String(lb)}>
-            <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:10}}>{lb} mensual - {tempStation}</div>
-            <div style={{position:"relative"}} data-chart>
-              <VBar data={mH.map(m=>({label:m.label,value:m.vec[Number(fi)]}))} color={C.pred+"88"} h={110}/>
-              <div style={{position:"absolute",top:0,left:0,right:0,opacity:.85}} data-chart>
-                <VBar data={mC.map(m=>({label:m.label,value:m.vec[Number(fi)]}))} color={String(c)} h={110}/>
+        {/* PM2.5 y PM10: ambas features están en hist Y curr (Open-Meteo tiene pm10) */}
+        {([["PM2.5",0,C.bad],["PM10",1,C.clima]] as [string,number,string][]).map(([lb,fi,c])=>{
+          const maxVal = Math.max(...mH.map(x=>x.vec[fi]),...mC.map(x=>x.vec[fi]),1);
+          return (
+            <Card key={lb}>
+              <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:10}}>{lb} mensual — {tempStation}</div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:6,display:"flex",gap:12}}>
+                <span><span style={{color:C.pred}}>■</span> 2013-17 (hist)</span>
+                <span><span style={{color:c}}>■</span> 2022-26 (aprox. ciudad)</span>
               </div>
-            </div>
-          </Card>))}
+              <GroupedMonthBars mH={mH} mC={mC} fi={fi} colorH={C.pred+"bb"} colorC={c} maxVal={maxVal} h={110}/>
+            </Card>);
+        })}
       </div>
 
       <Card>
-        <SectionTitle sub={"Mes historico mas similar en " + tempStation}>KNN temporal entre periodos</SectionTitle>
+        <SectionTitle sub={"¿A qué mes histórico se parece cada mes de 2022-26? (PM2.5 · " + tempStation + ")"}>KNN temporal entre períodos</SectionTitle>
+        <div style={{fontSize:10,color:C.muted,marginBottom:10,background:C.bg,borderRadius:6,padding:"6px 10px"}}>
+          ℹ️ El período actual proviene de un único sensor de ciudad — los valores por estación son aproximados. La similitud refleja el <b>patrón estacional</b>, no diferencias por zona.
+        </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           {mH.map((mh,mi)=>{
             if(!mh.vec.some(v=>v>0)) return null;
@@ -1137,9 +1218,8 @@ function TabTemporal({data}) {
 function TabCompare({data}) {
   if (!data) return null;
 
-  // ── Agrega únicamente data.curr cruda (sin duplicar por estación)
-  // data.curr está duplicada x12 estaciones sintéticas, así que usamos solo stIdx===0
-  const currRaw = data.curr.filter(r => r.stIdx === 0);
+  // Usar datos curr originales (sin duplicación x12 estaciones) para comparativa correcta
+  const currRaw = (data as any).currRaw || data.curr.filter(r => r.stIdx === 0);
   const histAll = data.hist;
 
   const avg=(arr,p)=>arr.length?arr.reduce((a,r)=>a+(r[p]||0),0)/arr.length:0;
@@ -1395,9 +1475,10 @@ function TabH6() {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <Card>
           <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:14}}>Varianza Explicada por Componente</div>
-          <div style={{display:"flex",alignItems:"flex-end",gap:8,height:150,marginBottom:8}}>
+          {/* Chart height=180 with overflow:hidden so bars never escape the card */}
+          <div style={{display:"flex",alignItems:"flex-end",gap:8,height:180,overflow:"hidden",marginBottom:8}}>
             {H6_PCA.map((pc,i)=>{
-              const bh=Math.max(8,(pc.var/45)*130);
+              const bh=Math.max(8,Math.min(150,(pc.var/80)*150));
               const colors=[C.bad,C.pred,"#a78bfa"];
               return (
                 <div key={pc.pc} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
@@ -1409,7 +1490,7 @@ function TabH6() {
             })}
             <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
               <div style={{fontSize:12,fontWeight:700,color:C.good}}>{(38.7+24.1+12.4).toFixed(1)}%</div>
-              <div style={{width:"100%",height:Math.round((75.2/45)*130),background:`linear-gradient(180deg,${C.bad},${C.pred},#a78bfa)`,borderRadius:"4px 4px 0 0",opacity:.6}}/>
+              <div style={{width:"100%",height:Math.min(150,Math.round((75.2/80)*150)),background:`linear-gradient(180deg,${C.bad},${C.pred},#a78bfa)`,borderRadius:"4px 4px 0 0",opacity:.6}}/>
               <span style={{fontSize:10,color:C.muted}}>Total</span>
               <span style={{fontSize:9,color:C.muted,textAlign:"center"}}>3 componentes</span>
             </div>
@@ -1606,19 +1687,20 @@ function TabHipotesis({knnCtx}) {
 //  APP PRINCIPAL
 // ═══════════════════════════════════════════════════════════
 export default function App() {
-  const [tab,setTab]           = useState("eda");
-  const [data,setData]         = useState(null);
-  const [period,setPeriod]     = useState("hist");
-  const [metric,setMetric]     = useState("coseno");
-  const [target,setTarget]     = useState(0);
-  const [k,setK]               = useState(5);
-  const [featMask,setFeatMask] = useState(FEATURES.map(()=>true));
-  const [profiles,setProfiles] = useState([]);
-  const [results,setResults]   = useState([]);
-  const [knnCtx,setKnnCtx]     = useState("");
+  const [tab,setTab]               = useState("eda");
+  const [data,setData]             = useState(null);
+  const [loadProgress,setLoadProgress] = useState(0);
+  const [period,setPeriod]         = useState("hist");
+  const [metric,setMetric]         = useState("coseno");
+  const [target,setTarget]         = useState(0);
+  const [k,setK]                   = useState(5);
+  const [featMask,setFeatMask]     = useState(FEATURES.map(()=>true));
+  const [profiles,setProfiles]     = useState([]);
+  const [results,setResults]       = useState([]);
+  const [knnCtx,setKnnCtx]         = useState("");
 
   useEffect(()=>{
-    loadAllData().then(d=>{ setData(d); setProfiles(stationProfile(d.hist)); });
+    loadAllData((pct)=>setLoadProgress(pct)).then(d=>{ setData(d); setProfiles(stationProfile(d.hist)); });
   },[]);
 
   useEffect(()=>{ if(!data) return; setProfiles(stationProfile(period==="hist"?data.hist:data.curr)); },[period,data]);
@@ -1644,11 +1726,25 @@ export default function App() {
         <div style={{fontSize:13,color:C.muted,marginBottom:2}}>Leonardo Raphael Pachari Gomez</div>
         <div style={{fontSize:12,color:C.muted}}>8 Hipótesis · 12 Estaciones · UCI 2013-17 + Open-Meteo 2022-26</div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,width:280}}>
         <div style={{width:44,height:44,border:`3px solid ${C.pred}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
-        <span style={{color:C.muted,fontSize:12}}>Cargando 420,768 registros históricos...</span>
+        <span style={{color:C.muted,fontSize:12}}>Cargando {loadProgress}% — 420,768 registros históricos...</span>
+        {/* Barra de progreso */}
+        <div style={{width:"100%",height:6,background:C.dim,borderRadius:4,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${loadProgress}%`,background:`linear-gradient(90deg,${C.pred},#8b5cf6)`,borderRadius:4,transition:"width .4s ease"}}/>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
+          {[
+            {label:"12 estaciones",done:loadProgress>=85},
+            {label:"Open-Meteo",done:loadProgress>=92},
+            {label:"8 hipótesis",done:loadProgress>=100},
+          ].map(({label,done})=>(
+            <div key={label} style={{padding:"3px 10px",background:done?`${C.good}22`:`${C.pred}18`,border:`1px solid ${done?C.good:C.border}`,borderRadius:12,fontSize:10,color:done?C.good:C.muted,transition:"all .3s"}}>
+              {done?"✓ ":""}{label}
+            </div>))}
+        </div>
       </div>
-      <div style={{display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
+      <div style={{display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center",marginTop:4}}>
         {["12 estaciones UCI","1,294 días Open-Meteo","8 hipótesis EDA","Análisis H1-H8"].map(t=>(
           <div key={t} style={{padding:"5px 14px",background:`${C.pred}18`,borderRadius:20,fontSize:11,color:C.pred}}>{t}</div>))}
       </div>
@@ -1661,26 +1757,26 @@ export default function App() {
   const critC=data.curr.filter(r=>r.critical).length;
 
   const TABS=[
-    {id:"eda",     l:"📊 EDA Overview"},
-    {id:"h1",      l:"H1: DEWP Predictor"},
-    {id:"h2",      l:"H2: Norte vs Sur"},
-    {id:"h3",      l:"H3: Métricas KNN"},
-    {id:"h4",      l:"H4: Bimodalidad"},
-    {id:"h5",      l:"H5: Viento"},
-    {id:"h6",      l:"H6: PCA"},
-    {id:"h7",      l:"H7: Markov"},
-    {id:"h8",      l:"H8: Balance AQI"},
-    {id:"knn",     l:"⚙️ KNN Interactivo"},
-    {id:"temporal",l:"📈 Evolución Temporal"},
-    {id:"compare", l:"🔄 Comparativa Períodos"},
+    {id:"eda",      l:"📊 EDA Overview"},
+    {id:"h1",       l:"H1: DEWP Predictor"},
+    {id:"h2",       l:"H2: Norte vs Sur"},
+    {id:"h3",       l:"H3: Métricas KNN"},
+    {id:"h4",       l:"H4: Bimodalidad"},
+    {id:"h5",       l:"H5: Viento"},
+    {id:"h6",       l:"H6: PCA"},
+    {id:"h7",       l:"H7: Markov"},
+    {id:"h8",       l:"H8: Balance AQI"},
+    {id:"knn",      l:"⚙️ KNN Interactivo"},
+    {id:"temporal", l:"📈 Evolución Temporal"},
+    {id:"compare",  l:"🔄 Comparativa Períodos"},
     {id:"hipotesis",l:"🤖 Hipótesis IA"},
   ];
 
   return (
     <div style={{background:C.bg,minHeight:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text,fontSize:14}}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}} .fade{animation:fadeIn .25s ease} select,input[type=number]{background:${C.card};color:${C.text};border:1px solid ${C.border};border-radius:6px;padding:5px 9px;font-size:13px;outline:none} select option{background:${C.card}} button{cursor:pointer;transition:all .15s} ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-thumb{background:${C.dim};border-radius:3px}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}} .fade{animation:fadeIn .3s ease} .slide-up{animation:slideUp .4s ease} select,input[type=number]{background:${C.card};color:${C.text};border:1px solid ${C.border};border-radius:6px;padding:5px 9px;font-size:13px;outline:none} select option{background:${C.card}} button{cursor:pointer;transition:all .15s} ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-thumb{background:${C.dim};border-radius:3px}`}</style>
 
-      <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,padding:"12px 24px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+      <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,padding:"12px 24px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",position:"relative",overflow:"hidden"}}>
         <div style={{width:38,height:38,borderRadius:9,background:`linear-gradient(135deg,${C.pred},#8b5cf6)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🌫</div>
         <div>
           <div style={{fontSize:16,fontWeight:700}}>Beijing Air Quality — Dashboard EDA y KNN</div>
@@ -1693,6 +1789,9 @@ export default function App() {
               <div style={{fontSize:9,color:C.muted}}>{l}</div>
             </div>))}
         </div>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:2,background:C.dim}}>
+          <div style={{height:"100%",width:`${loadProgress}%`,background:`linear-gradient(90deg,${C.pred},#8b5cf6)`,transition:"width .4s"}}/>
+        </div>
       </div>
 
       <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,display:"flex",overflowX:"auto",padding:"0 16px"}}>
@@ -1704,19 +1803,19 @@ export default function App() {
       </div>
 
       <div style={{padding:20,maxWidth:1120,margin:"0 auto"}} className="fade" key={tab}>
-        {tab==="eda"      && <TabEDA/>}
-        {tab==="h1"       && <TabH1/>}
-        {tab==="h2"       && <TabH2/>}
-        {tab==="h3"       && <TabH3/>}
-        {tab==="h4"       && <TabH4/>}
-        {tab==="h5"       && <TabH5/>}
-        {tab==="h6"       && <TabH6/>}
-        {tab==="h7"       && <TabH7/>}
-        {tab==="h8"       && <TabH8/>}
-        {tab==="knn"      && <TabKNN data={data} profiles={profiles} results={results} target={target} setTarget={setTarget} period={period} setPeriod={setPeriod} metric={metric} setMetric={setMetric} k={k} setK={setK} featMask={featMask} setFeatMask={setFeatMask} runKNN={runKNN}/>}
-        {tab==="temporal" && <TabTemporal data={data}/>}
-        {tab==="compare"  && <TabCompare data={data}/>}
-        {tab==="hipotesis"& <TabHipotesis knnCtx={knnCtx}/>}
+        {tab==="eda"       && <TabEDA/>}
+        {tab==="h1"        && <TabH1/>}
+        {tab==="h2"        && <TabH2/>}
+        {tab==="h3"        && <TabH3/>}
+        {tab==="h4"        && <TabH4/>}
+        {tab==="h5"        && <TabH5/>}
+        {tab==="h6"        && <TabH6/>}
+        {tab==="h7"        && <TabH7/>}
+        {tab==="h8"        && <TabH8/>}
+        {tab==="knn"       && <TabKNN data={data} profiles={profiles} results={results} target={target} setTarget={setTarget} period={period} setPeriod={setPeriod} metric={metric} setMetric={setMetric} k={k} setK={setK} featMask={featMask} setFeatMask={setFeatMask} runKNN={runKNN}/>}
+        {tab==="temporal"  && <TabTemporal data={data}/>}
+        {tab==="compare"   && <TabCompare data={data}/>}
+        {tab==="hipotesis" && <TabHipotesis knnCtx={knnCtx}/>}
       </div>
     </div>);
 }
