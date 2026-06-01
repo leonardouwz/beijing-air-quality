@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Beijing Air Latent Space — Visual Analytics</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a212b;
+    --panel-2: #131922;
+    --border: #2a3543;
+    --ink: #e6edf3;
+    --ink-dim: #8b98a5;
+    --accent: #38bdf8;
+    --sel: #f43f5e;            /* color de la seleccion (histogramas/serie) */
+    --grid: #243040;
+    --inv: #3b82f6;            /* Invierno */
+    --pri: #22c55e;            /* Primavera */
+    --ver: #f59e0b;            /* Verano */
+    --oto: #a855f7;            /* Otono */
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  header {
+    display: flex; align-items: center; gap: 20px;
+    padding: 10px 18px; background: var(--panel-2);
+    border-bottom: 1px solid var(--border); flex: 0 0 auto;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header h1 small { color: var(--ink-dim); font-weight: 400; font-size: 11px; display: block; }
+  .spacer { flex: 1; }
+  .stat { font-size: 11px; color: var(--ink-dim); line-height: 1.35; }
+  .stat b { color: var(--ink); font-size: 13px; }
+  .ctl { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-dim); }
+  select, button {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; font-size: 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  .legend { display: flex; gap: 12px; align-items: center; font-size: 11px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-dim); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .grid {
+    flex: 1; display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    grid-template-rows: 1fr 1fr 0.85fr;
+    gap: 10px; padding: 10px; min-height: 0;
+  }
+  .quad {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative;
+  }
+  .quad-A { grid-column: 1; grid-row: 1 / 3; }   /* el scatter ocupa la columna izquierda (2 filas) */
+  .quad-B { grid-column: 2; grid-row: 1; }
+  .quad-C { grid-column: 2; grid-row: 2; }
+  .quad-D { grid-column: 1 / 3; grid-row: 3; }   /* serie temporal a todo lo ancho */
+  .quad h2 {
+    font-size: 12px; margin: 0; padding: 8px 12px 4px; font-weight: 600;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .quad h2 .sub { font-size: 10.5px; color: var(--ink-dim); font-weight: 400; }
+  .plot { flex: 1; position: relative; min-height: 0; }
+  .plot canvas, .plot svg { position: absolute; top: 0; left: 0; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 50; display: none;
+    background: rgba(13,18,24,.96); border: 1px solid var(--accent);
+    border-radius: 8px; padding: 9px 11px; font-size: 11.5px; line-height: 1.5;
+    box-shadow: 0 6px 22px rgba(0,0,0,.5); max-width: 260px;
+  }
+  .tooltip b { color: var(--accent); }
+  .tooltip table { border-collapse: collapse; margin-top: 4px; }
+  .tooltip td { padding: 1px 6px 1px 0; }
+  .tooltip td.k { color: var(--ink-dim); }
+  .tooltip td.v { color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+
+  .selbar {
+    position: absolute; top: 8px; right: 10px; z-index: 10;
+    background: rgba(19,25,34,.92); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 11px; color: var(--ink-dim);
+    max-width: 240px;
+  }
+  .selbar b { color: var(--sel); }
+  .selbar .row { display: flex; justify-content: space-between; gap: 12px; }
+  .selbar .row span:last-child { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .loadings { padding: 4px 12px 10px; font-size: 10px; color: var(--ink-dim); }
+  .loadings code { color: var(--accent); }
+  .axis text { fill: var(--ink-dim); font-size: 10px; }
+  .axis path, .axis line { stroke: var(--grid); }
+  .brush .selection { stroke: var(--accent); fill: var(--accent); fill-opacity: .08; }
+
+  #loader {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); z-index: 100; flex-direction: column; gap: 14px;
+  }
+  .spinner {
+    width: 34px; height: 34px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #err { color: var(--sel); font-size: 13px; max-width: 520px; text-align: center; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Beijing Air Latent Space
+      <small id="subtitle">Espacio latente PCA · 10 atributos ambientales</small>
+    </h1>
+    <div class="legend" id="legend"></div>
+    <div class="spacer"></div>
+    <div class="ctl">Dataset
+      <select id="dataset">
+        <option value="treated" selected>Tratado</option>
+        <option value="raw">Crudo (sin tratamiento)</option>
+      </select>
+    </div>
+    <div class="ctl">Colorear por
+      <select id="colorBy">
+        <option value="season" selected>Estacion del año</option>
+        <option value="period">Periodo</option>
+        <option value="zona">Zona urbana</option>
+      </select>
+    </div>
+    <div class="ctl"><button id="reset">Limpiar selección</button></div>
+    <div class="stat" id="globalStat"></div>
+  </header>
+
+  <div class="grid">
+    <!-- Cuadrante A: Espacio latente (PCA scatter + brushing) -->
+    <div class="quad quad-A">
+      <h2>A · Espacio Latente (PCA)
+        <span class="sub" id="pcaSub">PC1 vs PC2</span>
+      </h2>
+      <div class="plot" id="plotA">
+        <canvas id="canvasA"></canvas>
+        <svg id="svgA"></svg>
+        <div class="selbar" id="selbar"></div>
+      </div>
+      <div class="loadings" id="loadings"></div>
+    </div>
+
+    <!-- Cuadrante B: Histograma PM2.5 -->
+    <div class="quad quad-B">
+      <h2>B · Distribución PM2.5 <span class="sub">µg/m³ · gris = ciudad, color = selección</span></h2>
+      <div class="plot" id="plotB"><svg id="svgB"></svg></div>
+    </div>
+
+    <!-- Cuadrante C: Histograma DEWP -->
+    <div class="quad quad-C">
+      <h2>C · Distribución DEWP (Punto de rocío) <span class="sub">°C · predictor raíz</span></h2>
+      <div class="plot" id="plotC"><svg id="svgC"></svg></div>
+    </div>
+
+    <!-- Cuadrante D: Serie temporal de detalle -->
+    <div class="quad quad-D">
+      <h2>D · Serie Temporal de PM2.5 <span class="sub">gris = todo · color = selección (persistencia / Markov)</span></h2>
+      <div class="plot" id="plotD"><canvas id="canvasD"></canvas><svg id="svgD"></svg></div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <div style="color:var(--ink-dim);font-size:13px;">Calculando PCA sobre el vector de características…</div>
+  <div id="err"></div>
+</div>
+
+<script src="vendor/d3.v7.min.js"></script>
+<script src="data/aq_data.js"></script>
+<script src="data/aq_data_raw.js"></script>
+<script>
+"use strict";
+(function () {
+  const errEl = document.getElementById("err");
+  if (!window.d3) { errEl.textContent = "No se pudo cargar D3 (vendor/d3.v7.min.js)."; return; }
+
+  // ───────── Datasets intercambiables (combo box) ─────────
+  const DATASETS = { treated: window.AQ_DATA, raw: window.AQ_DATA_RAW };
+  if (!DATASETS.treated || !DATASETS.treated.X) {
+    errEl.textContent = "No se pudo cargar data/aq_data.js. Ejecuta primero:  python build_data.py";
+    return;
+  }
+  let D = DATASETS.treated;   // dataset activo
+
+  // Variables derivadas del dataset (se recalculan al cambiar de dataset).
+  let FEAT, FMIN, FMAX, N, IDX, I_PM, I_DEW, I_TEMP, I_WSPM, I_PRES, pc1, pc2, pcs;
+  function deriveDataset() {
+    FEAT = D.meta.features;
+    FMIN = D.meta.feat_min; FMAX = D.meta.feat_max;
+    N = D.meta.n;
+    IDX = {}; FEAT.forEach((f, i) => IDX[f] = i);
+    I_PM = IDX["PM2.5"]; I_DEW = IDX["DEW"]; I_TEMP = IDX["TEMP"];
+    I_WSPM = IDX["WSPM"]; I_PRES = IDX["PRES"];
+    B.feat = I_PM; C.feat = I_DEW;
+    const r = computePCA(); pc1 = r.pc1; pc2 = r.pc2; pcs = r.pcs;
+  }
+
+  const SEASON_COL = { 0: "#3b82f6", 1: "#22c55e", 2: "#f59e0b", 3: "#a855f7" }; // Inv,Pri,Ver,Oto
+  const PERIOD_COL = { 0: "#38bdf8", 1: "#fb7185" };
+  const ZONA_COL   = { 0: "#60a5fa", 1: "#34d399", 2: "#fbbf24", 3: "#f472b6" };
+
+  // Reconstruye el valor ORIGINAL del registro i para la feature j (inversa Min-Max).
+  function orig(j, i) { return FMIN[j] + D.X[j][i] * (FMAX[j] - FMIN[j]); }
+
+  // ───────── PCA en el cliente (covarianza + Jacobi) ─────────
+  function computePCA() {
+    const p = FEAT.length;
+    // Medias por feature.
+    const mean = new Float64Array(p);
+    for (let j = 0; j < p; j++) {
+      let s = 0; const col = D.X[j];
+      for (let i = 0; i < N; i++) s += col[i];
+      mean[j] = s / N;
+    }
+    // Matriz de covarianza (p x p).
+    const C = Array.from({ length: p }, () => new Float64Array(p));
+    for (let j = 0; j < p; j++) {
+      for (let k = j; k < p; k++) {
+        let s = 0; const cj = D.X[j], ck = D.X[k], mj = mean[j], mk = mean[k];
+        for (let i = 0; i < N; i++) s += (cj[i] - mj) * (ck[i] - mk);
+        const v = s / (N - 1);
+        C[j][k] = v; C[k][j] = v;
+      }
+    }
+    const { values, vectors } = jacobiEigen(C);
+    // Ordena por autovalor descendente.
+    const order = values.map((v, i) => i).sort((a, b) => values[b] - values[a]);
+    const total = values.reduce((a, b) => a + Math.max(b, 0), 0) || 1;
+    const pcs = order.slice(0, 2).map(o => ({
+      vec: vectors.map(row => row[o]),
+      val: values[o],
+      ratio: Math.max(values[o], 0) / total,
+    }));
+    // Proyeccion de cada punto.
+    const pc1 = new Float64Array(N), pc2 = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      let a = 0, b = 0;
+      for (let j = 0; j < p; j++) {
+        const cx = D.X[j][i] - mean[j];
+        a += cx * pcs[0].vec[j];
+        b += cx * pcs[1].vec[j];
+      }
+      pc1[i] = a; pc2[i] = b;
+    }
+    return { pc1, pc2, pcs };
+  }
+
+  // Jacobi eigenvalue para matriz simetrica.
+  function jacobiEigen(Ain) {
+    const n = Ain.length;
+    const A = Ain.map(r => Float64Array.from(r));
+    const V = Array.from({ length: n }, (_, i) => {
+      const r = new Float64Array(n); r[i] = 1; return r;
+    });
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += A[p][q] * A[p][q];
+      if (off < 1e-12) break;
+      for (let p = 0; p < n; p++) {
+        for (let q = p + 1; q < n; q++) {
+          if (Math.abs(A[p][q]) < 1e-14) continue;
+          const theta = (A[q][q] - A[p][p]) / (2 * A[p][q]);
+          const t = Math.sign(theta) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+          const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+          for (let i = 0; i < n; i++) {
+            const aip = A[i][p], aiq = A[i][q];
+            A[i][p] = c * aip - s * aiq;
+            A[i][q] = s * aip + c * aiq;
+          }
+          for (let i = 0; i < n; i++) {
+            const api = A[p][i], aqi = A[q][i];
+            A[p][i] = c * api - s * aqi;
+            A[q][i] = s * api + c * aqi;
+          }
+          for (let i = 0; i < n; i++) {
+            const vip = V[i][p], viq = V[i][q];
+            V[i][p] = c * vip - s * viq;
+            V[i][q] = s * vip + c * viq;
+          }
+        }
+      }
+    }
+    const values = A.map((row, i) => row[i]);
+    return { values, vectors: V };
+  }
+
+  // ───────── Estado global ─────────
+  let selected = null;            // Set de indices, o null = sin seleccion
+  let colorMode = "season";
+  const colorOf = (i) => {
+    if (colorMode === "season") return SEASON_COL[D.season[i]];
+    if (colorMode === "period") return PERIOD_COL[D.period[i]];
+    return ZONA_COL[D.zona[i]];
+  };
+
+  // ───────── Leyenda ─────────
+  function renderLegend() {
+    const el = document.getElementById("legend");
+    let items;
+    if (colorMode === "season") items = D.meta.seasons.map((s, i) => [s, SEASON_COL[i]]);
+    else if (colorMode === "period") items = D.meta.periods.map((s, i) => [s, PERIOD_COL[i]]);
+    else items = D.meta.zonas.map((s, i) => [s, ZONA_COL[i]]);
+    el.innerHTML = items.map(([n, c]) =>
+      `<span><i class="dot" style="background:${c}"></i>${n}</span>`).join("");
+  }
+
+  // ───────── Helpers de tamaño ─────────
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
+  function sizeCanvas(canvas, w, h) {
+    canvas.width = w * DPR; canvas.height = h * DPR;
+    canvas.style.width = w + "px"; canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return ctx;
+  }
+
+  // ═══════════ CUADRANTE A: scatter PCA (canvas) + brush (svg) ═══════════
+  const A = { m: { t: 10, r: 14, b: 34, l: 42 } };
+  function setupA() {
+    const plot = document.getElementById("plotA");
+    A.W = plot.clientWidth; A.H = plot.clientHeight;
+    A.iw = A.W - A.m.l - A.m.r; A.ih = A.H - A.m.t - A.m.b;
+    A.ctx = sizeCanvas(document.getElementById("canvasA"), A.W, A.H);
+    A.x = d3.scaleLinear().domain(d3.extent(pc1)).nice().range([A.m.l, A.m.l + A.iw]);
+    A.y = d3.scaleLinear().domain(d3.extent(pc2)).nice().range([A.m.t + A.ih, A.m.t]);
+    A.px = new Float64Array(N); A.py = new Float64Array(N);
+    for (let i = 0; i < N; i++) { A.px[i] = A.x(pc1[i]); A.py[i] = A.y(pc2[i]); }
+    A.quad = d3.quadtree().x(i => A.px[i]).y(i => A.py[i]).addAll(d3.range(N));
+    renderBaseA();   // capa base offscreen (todos los puntos coloreados, una sola vez)
+
+    const svg = d3.select("#svgA").attr("width", A.W).attr("height", A.H);
+    svg.selectAll("*").remove();
+    svg.append("g").attr("class", "axis").attr("transform", `translate(0,${A.m.t + A.ih})`)
+      .call(d3.axisBottom(A.x).ticks(6));
+    svg.append("g").attr("class", "axis").attr("transform", `translate(${A.m.l},0)`)
+      .call(d3.axisLeft(A.y).ticks(6));
+    svg.append("text").attr("x", A.m.l + A.iw / 2).attr("y", A.H - 4)
+      .attr("text-anchor", "middle").attr("fill", "var(--ink-dim)")
+      .attr("font-size", 11).text(`PC1 (${(pcs[0].ratio * 100).toFixed(1)}% var.)`);
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(A.m.t + A.ih / 2))
+      .attr("y", 13).attr("text-anchor", "middle").attr("fill", "var(--ink-dim)")
+      .attr("font-size", 11).text(`PC2 (${(pcs[1].ratio * 100).toFixed(1)}% var.)`);
+
+    // Brush (selección por arrastre).
+    A.brush = d3.brush()
+      .extent([[A.m.l, A.m.t], [A.m.l + A.iw, A.m.t + A.ih]])
+      .on("brush", brushed).on("end", brushEnded);
+    A.brushG = svg.append("g").attr("class", "brush").call(A.brush);
+
+    // Tooltip por hover (inspección de un solo punto).
+    A.brushG.select(".overlay")
+      .on("mousemove.tip", hoverMove)
+      .on("mouseleave.tip", () => hideTip());
+
+    document.getElementById("pcaSub").textContent =
+      `PC1 vs PC2 · ${N.toLocaleString("es")} registros · var. acumulada ${((pcs[0].ratio + pcs[1].ratio) * 100).toFixed(1)}%`;
+    renderLoadings();
+  }
+
+  function renderLoadings() {
+    const fmt = (pc) => FEAT.map((f, j) => [f, pc.vec[j]])
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4)
+      .map(([f, v]) => `<code>${f}</code> ${v >= 0 ? "+" : ""}${v.toFixed(2)}`).join(" · ");
+    document.getElementById("loadings").innerHTML =
+      `<b>Cargas PC1:</b> ${fmt(pcs[0])}<br><b>Cargas PC2:</b> ${fmt(pcs[1])}`;
+  }
+
+  // Renderiza TODOS los puntos (coloreados) a un canvas offscreen una sola vez.
+  // Permite que el redibujo durante el brushing sea O(seleccionados) en vez de O(N).
+  function renderBaseA() {
+    A.base = A.base || document.createElement("canvas");
+    A.base.width = A.W * DPR; A.base.height = A.H * DPR;
+    const b = A.base.getContext("2d");
+    b.setTransform(DPR, 0, 0, DPR, 0, 0);
+    b.clearRect(0, 0, A.W, A.H);
+    b.globalAlpha = 0.55;
+    const sz = N > 120000 ? 1.6 : 2.2, off = sz / 2;
+    for (let i = 0; i < N; i++) {
+      b.fillStyle = colorOf(i);
+      b.fillRect(A.px[i] - off, A.py[i] - off, sz, sz);
+    }
+    b.globalAlpha = 1;
+  }
+
+  function drawA() {
+    const ctx = A.ctx; ctx.clearRect(0, 0, A.W, A.H);
+    const hasSel = selected && selected.size > 0;
+    if (!hasSel) { ctx.drawImage(A.base, 0, 0, A.W, A.H); return; }
+    // Población atenuada (blit instantáneo) + solo los seleccionados encima.
+    ctx.globalAlpha = 0.30; ctx.drawImage(A.base, 0, 0, A.W, A.H); ctx.globalAlpha = 1;
+    for (const i of selected) {
+      ctx.fillStyle = colorOf(i);
+      ctx.fillRect(A.px[i] - 1.6, A.py[i] - 1.6, 3.2, 3.2);
+    }
+  }
+
+  function brushed({ selection }) {
+    if (!selection) return;
+    applyBrush(selection);
+  }
+  function brushEnded({ selection }) {
+    // No re-invocar clearSelection aqui: evita la recursion brush.move <-> end.
+    if (!selection) { selected = null; scheduleRedraw(); return; }
+    applyBrush(selection);
+  }
+  function applyBrush(sel) {
+    const [[x0, y0], [x1, y1]] = sel;
+    const s = new Set();
+    // Recorre via quadtree visitando solo nodos dentro del rango.
+    A.quad.visit((node, qx0, qy0, qx1, qy1) => {
+      if (!node.length) {
+        do {
+          const i = node.data;
+          if (A.px[i] >= x0 && A.px[i] <= x1 && A.py[i] >= y0 && A.py[i] <= y1) s.add(i);
+        } while ((node = node.next));
+      }
+      return qx0 > x1 || qy0 > y1 || qx1 < x0 || qy1 < y0;
+    });
+    selected = s;
+    scheduleRedraw();
+  }
+
+  // ───────── redibujo throttled ─────────
+  let raf = null;
+  function scheduleRedraw() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      drawA(); drawHist(B, I_PM); drawHist(C, I_DEW); drawD(); updateSelbar();
+    });
+  }
+  function clearSelection() {
+    selected = null;
+    if (A.brushG) A.brushG.call(A.brush.move, null);
+    scheduleRedraw();
+  }
+
+  // ═══════════ CUADRANTES B y C: histogramas enlazados ═══════════
+  function setupHist(cfg) {
+    const plot = document.getElementById(cfg.plot);
+    cfg.m = { t: 12, r: 14, b: 30, l: 44 };
+    cfg.W = plot.clientWidth; cfg.H = plot.clientHeight;
+    cfg.iw = cfg.W - cfg.m.l - cfg.m.r; cfg.ih = cfg.H - cfg.m.t - cfg.m.b;
+    cfg.svg = d3.select("#" + cfg.svg_id).attr("width", cfg.W).attr("height", cfg.H);
+    cfg.svg.selectAll("*").remove();
+    // Valores originales de toda la poblacion.
+    const j = cfg.feat;
+    cfg.vals = new Float64Array(N);
+    for (let i = 0; i < N; i++) cfg.vals[i] = orig(j, i);
+    const ext = d3.extent(cfg.vals);
+    cfg.x = d3.scaleLinear().domain(ext).nice().range([cfg.m.l, cfg.m.l + cfg.iw]);
+    cfg.bin = d3.bin().domain(cfg.x.domain()).thresholds(36);
+    cfg.popBins = cfg.bin(cfg.vals);
+    cfg.popProp = cfg.popBins.map(b => b.length / N);
+    cfg.gBody = cfg.svg.append("g");
+    cfg.xAxis = cfg.svg.append("g").attr("class", "axis")
+      .attr("transform", `translate(0,${cfg.m.t + cfg.ih})`).call(d3.axisBottom(cfg.x).ticks(6));
+    cfg.yAxisG = cfg.svg.append("g").attr("class", "axis").attr("transform", `translate(${cfg.m.l},0)`);
+    cfg.svg.append("text").attr("x", cfg.m.l + cfg.iw / 2).attr("y", cfg.H - 2)
+      .attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 10)
+      .text(cfg.label);
+  }
+
+  function drawHist(cfg, _j) {
+    const hasSel = selected && selected.size > 0;
+    let selProp = null;
+    if (hasSel) {
+      const selVals = [];
+      for (const i of selected) selVals.push(cfg.vals[i]);
+      const selBins = cfg.bin(selVals);
+      selProp = selBins.map(b => b.length / Math.max(selVals.length, 1));
+    }
+    const maxY = d3.max(cfg.popProp.concat(selProp || [])) || 0.01;
+    const y = d3.scaleLinear().domain([0, maxY]).range([cfg.m.t + cfg.ih, cfg.m.t]);
+    cfg.yAxisG.call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".0%")));
+
+    const bw = (b) => Math.max(1, cfg.x(b.x1) - cfg.x(b.x0) - 1);
+    // Poblacion (gris de fondo).
+    const pop = cfg.gBody.selectAll("rect.pop").data(cfg.popBins);
+    pop.enter().append("rect").attr("class", "pop").merge(pop)
+      .attr("x", b => cfg.x(b.x0) + 0.5).attr("width", bw)
+      .attr("y", (b, i) => y(cfg.popProp[i])).attr("height", (b, i) => y(0) - y(cfg.popProp[i]))
+      .attr("fill", "#3a4757").attr("opacity", 0.85);
+    pop.exit().remove();
+    // Seleccion (color solido superpuesto).
+    const selData = hasSel ? cfg.popBins.map((b, i) => ({ b, p: selProp[i] || 0 })) : [];
+    const sel = cfg.gBody.selectAll("rect.sel").data(selData);
+    sel.enter().append("rect").attr("class", "sel").merge(sel)
+      .attr("x", d => cfg.x(d.b.x0) + 0.5).attr("width", d => bw(d.b))
+      .attr("y", d => y(d.p)).attr("height", d => y(0) - y(d.p))
+      .attr("fill", "var(--sel)").attr("opacity", 0.82);
+    sel.exit().remove();
+  }
+
+  // ═══════════ CUADRANTE D: serie temporal (canvas) ═══════════
+  function setupD() {
+    const plot = document.getElementById("plotD");
+    D2.m = { t: 12, r: 14, b: 26, l: 44 };
+    D2.W = plot.clientWidth; D2.H = plot.clientHeight;
+    D2.iw = D2.W - D2.m.l - D2.m.r; D2.ih = D2.H - D2.m.t - D2.m.b;
+    D2.ctx = sizeCanvas(document.getElementById("canvasD"), D2.W, D2.H);
+    D2.pm = new Float64Array(N);
+    for (let i = 0; i < N; i++) D2.pm[i] = orig(I_PM, i);
+    D2.x = d3.scaleTime().domain(d3.extent(D.t, t => new Date(t))).range([D2.m.l, D2.m.l + D2.iw]);
+    D2.y = d3.scaleLinear().domain([0, d3.max(D2.pm) * 1.02]).range([D2.m.t + D2.ih, D2.m.t]);
+    D2.tx = new Float64Array(N); D2.ty = new Float64Array(N);
+    for (let i = 0; i < N; i++) { D2.tx[i] = D2.x(new Date(D.t[i])); D2.ty[i] = D2.y(D2.pm[i]); }
+    renderBaseD();
+
+    const svg = d3.select("#svgD").attr("width", D2.W).attr("height", D2.H);
+    svg.selectAll("*").remove();
+    // Marcas SIEMPRE anuales (independiente del rango: evita que datasets cortos
+    // como el crudo muestren meses). Paso adaptativo para no saturar de etiquetas.
+    const [t0, t1] = D2.x.domain();
+    const spanYears = (t1 - t0) / (365.25 * 864e5);
+    const yearStep = spanYears > 16 ? 2 : 1;
+    svg.append("g").attr("class", "axis").attr("transform", `translate(0,${D2.m.t + D2.ih})`)
+      .call(d3.axisBottom(D2.x).ticks(d3.timeYear.every(yearStep)).tickFormat(d3.timeFormat("%Y")));
+    svg.append("g").attr("class", "axis").attr("transform", `translate(${D2.m.l},0)`)
+      .call(d3.axisLeft(D2.y).ticks(5));
+    // Linea de referencia smog (150 µg/m³).
+    svg.append("line").attr("x1", D2.m.l).attr("x2", D2.m.l + D2.iw)
+      .attr("y1", D2.y(150)).attr("y2", D2.y(150))
+      .attr("stroke", "var(--sel)").attr("stroke-dasharray", "4 4").attr("opacity", .5);
+    svg.append("text").attr("x", D2.m.l + D2.iw - 4).attr("y", D2.y(150) - 4)
+      .attr("text-anchor", "end").attr("fill", "var(--sel)").attr("font-size", 9).text("150 (smog)");
+  }
+
+  // Capa base offscreen de la serie temporal (todos los puntos en gris, una vez).
+  function renderBaseD() {
+    D2.base = D2.base || document.createElement("canvas");
+    D2.base.width = D2.W * DPR; D2.base.height = D2.H * DPR;
+    const b = D2.base.getContext("2d");
+    b.setTransform(DPR, 0, 0, DPR, 0, 0);
+    b.clearRect(0, 0, D2.W, D2.H);
+    b.globalAlpha = 0.30; b.fillStyle = "#5b6b7d";
+    for (let i = 0; i < N; i++) b.fillRect(D2.tx[i] - 0.8, D2.ty[i] - 0.8, 1.6, 1.6);
+    b.globalAlpha = 1;
+  }
+
+  function drawD() {
+    const ctx = D2.ctx; ctx.clearRect(0, 0, D2.W, D2.H);
+    const hasSel = selected && selected.size > 0;
+    ctx.globalAlpha = hasSel ? 0.33 : 1;          // atenúa el fondo cuando hay selección
+    ctx.drawImage(D2.base, 0, 0, D2.W, D2.H);
+    ctx.globalAlpha = 1;
+    if (hasSel) {
+      ctx.fillStyle = "#f43f5e";
+      for (const i of selected) ctx.fillRect(D2.tx[i] - 1.6, D2.ty[i] - 1.6, 3.2, 3.2);
+    }
+  }
+
+  // ═══════════ Tooltip / inspección ═══════════
+  const tip = document.getElementById("tooltip");
+  function hoverMove(event) {
+    const [mx, my] = d3.pointer(event, document.getElementById("svgA"));
+    const i = A.quad.find(mx, my, 8);
+    if (i === undefined) { hideTip(); return; }
+    showTip(event, i);
+  }
+  function showTip(event, i) {
+    const wd = D.meta.wd[D.wd[i]];
+    const st = D.meta.stations[D.station[i]];
+    const se = D.meta.seasons[D.season[i]];
+    const pe = D.meta.periods[D.period[i]];
+    const dt = new Date(D.t[i]).toISOString().slice(0, 10);
+    tip.innerHTML = `<b>${st}</b> · ${se} · ${pe}<br><span style="color:var(--ink-dim)">${dt}</span>
+      <table>
+        <tr><td class="k">PM2.5</td><td class="v">${orig(I_PM, i).toFixed(1)} µg/m³</td></tr>
+        <tr><td class="k">DEWP</td><td class="v">${orig(I_DEW, i).toFixed(1)} °C</td></tr>
+        <tr><td class="k">TEMP</td><td class="v">${orig(I_TEMP, i).toFixed(1)} °C</td></tr>
+        <tr><td class="k">WSPM</td><td class="v">${orig(I_WSPM, i).toFixed(1)} m/s</td></tr>
+        <tr><td class="k">PRES</td><td class="v">${orig(I_PRES, i).toFixed(0)} hPa</td></tr>
+        <tr><td class="k">wd</td><td class="v">${wd}</td></tr>
+      </table>`;
+    tip.style.display = "block";
+    const pad = 14;
+    let x = event.clientX + pad, yv = event.clientY + pad;
+    const r = tip.getBoundingClientRect();
+    if (x + r.width > window.innerWidth) x = event.clientX - r.width - pad;
+    if (yv + r.height > window.innerHeight) yv = event.clientY - r.height - pad;
+    tip.style.left = x + "px"; tip.style.top = yv + "px";
+  }
+  function hideTip() { tip.style.display = "none"; }
+
+  // ═══════════ Panel de selección ═══════════
+  function updateSelbar() {
+    const el = document.getElementById("selbar");
+    if (!selected || selected.size === 0) {
+      el.innerHTML = `<div class="row"><span>Sin selección</span></div>
+        <div style="margin-top:3px;font-size:10px">Arrastra un cuadro sobre el scatter para enlazar B · C · D</div>`;
+      return;
+    }
+    const arr = [...selected];
+    if (arr.length === 1) {
+      const i = arr[0];
+      el.innerHTML = `<div class="row"><span>Punto único</span><span><b>1</b></span></div>
+        <div style="font-size:10px;margin-top:2px">${D.meta.stations[D.station[i]]} · ${new Date(D.t[i]).toISOString().slice(0,10)}<br>
+        PM2.5 ${orig(I_PM,i).toFixed(1)} · DEWP ${orig(I_DEW,i).toFixed(1)}°C · wd ${D.meta.wd[D.wd[i]]}</div>`;
+      return;
+    }
+    let sPM = 0, sDEW = 0;
+    const seasonCnt = [0, 0, 0, 0], periodCnt = [0, 0];
+    for (const i of arr) {
+      sPM += orig(I_PM, i); sDEW += orig(I_DEW, i);
+      seasonCnt[D.season[i]]++; periodCnt[D.period[i]]++;
+    }
+    const domS = seasonCnt.indexOf(Math.max(...seasonCnt));
+    el.innerHTML = `<div class="row"><span>Seleccionados</span><span><b>${arr.length.toLocaleString("es")}</b></span></div>
+      <div class="row"><span>PM2.5 medio</span><span>${(sPM / arr.length).toFixed(1)} µg/m³</span></div>
+      <div class="row"><span>DEWP medio</span><span>${(sDEW / arr.length).toFixed(1)} °C</span></div>
+      <div class="row"><span>Estación dom.</span><span>${D.meta.seasons[domS]}</span></div>
+      <div class="row"><span>2013-17 / 22-26</span><span>${periodCnt[0]} / ${periodCnt[1]}</span></div>`;
+  }
+
+  // ═══════════ Estadísticas globales ═══════════
+  function renderGlobal() {
+    let sPM = 0, crit = 0;
+    for (let i = 0; i < N; i++) { const v = orig(I_PM, i); sPM += v; if (v > 150) crit++; }
+    document.getElementById("globalStat").innerHTML =
+      `<b>${N.toLocaleString("es")}</b> registros · PM2.5 medio <b>${(sPM / N).toFixed(1)}</b> µg/m³ · días críticos <b>${(crit / N * 100).toFixed(1)}%</b>`;
+  }
+
+  // ═══════════ Objetos de cuadrante ═══════════
+  const B = { plot: "plotB", svg_id: "svgB", feat: I_PM, label: "PM2.5 (µg/m³)" };
+  const C = { plot: "plotC", svg_id: "svgC", feat: I_DEW, label: "DEWP (°C)" };
+  const D2 = {};
+
+  // ═══════════ Init + resize ═══════════
+  function buildAll() {
+    setupA(); setupHist(B); setupHist(C); setupD();
+    drawA(); drawHist(B); drawHist(C); drawD(); updateSelbar();
+  }
+  function rebuild() {
+    // Recalcula tamaños y re-aplica selección.
+    setupA(); setupHist(B); setupHist(C); setupD();
+    if (A.brushG) A.brushG.call(A.brush);  // re-instala brush limpio
+    drawA(); drawHist(B); drawHist(C); drawD(); updateSelbar();
+  }
+
+  // Carga (o recarga) el dataset activo: recalcula PCA y reconstruye los 4 cuadrantes.
+  function loadDataset(key) {
+    const next = DATASETS[key];
+    if (!next || !next.X) { console.warn("Dataset no disponible:", key); return; }
+    D = next;
+    selected = null;
+    deriveDataset();
+    document.getElementById("subtitle").textContent =
+      `${D.meta.label} · ${D.meta.note}`;
+    renderLegend(); renderGlobal(); buildAll();
+    console.log(`[Beijing Air] Dataset "${D.meta.label}" | N=${N}, var(PC1+PC2)=${((pcs[0].ratio + pcs[1].ratio) * 100).toFixed(1)}%`);
+  }
+
+  document.getElementById("dataset").addEventListener("change", (e) => {
+    const key = e.target.value;
+    // Aviso inmediato y trabajo pesado diferido para que la UI repinte antes.
+    document.getElementById("subtitle").textContent = "⏳ Recalculando PCA…";
+    setTimeout(() => loadDataset(key), 20);
+  });
+  document.getElementById("colorBy").addEventListener("change", (e) => {
+    colorMode = e.target.value; renderLegend(); renderBaseA(); drawA();
+  });
+  document.getElementById("reset").addEventListener("click", clearSelection);
+  let rt = null;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(rebuild, 180); });
+
+  // ───────── Arranque ─────────
+  loadDataset("treated");
+  document.getElementById("loader").style.display = "none";
+})();
+</script>
+</body>
+</html>
