@@ -3,29 +3,24 @@
 """
 build_data.py — Motor de datos del prototipo "Contrataciones — Espacio de Riesgo".
 
-Toma la salida del notebook `fase1_Preprocesamiento.ipynb`
-(`adjudicaciones_procesadas.parquet`) y COMPLETA la limpieza que faltaba para
-que el vector sea apto para PCA / visualizacion, luego lo serializa para el
-navegador en  data/cp_data.js  (window.CP_DATA).
+Acepta CUALQUIERA de las dos salidas del notebook fase1_Preprocesamiento.ipynb:
+  • adjudicaciones_procesadas.parquet  (tabla rica, 38 cols: fecha, proveedor,
+                                        departamento, alertas...)  → experiencia completa
+  • matriz_modelo.parquet              (matriz ML, 20 cols: SIN fecha/proveedor/
+                                        departamento/alertas)       → versión reducida
 
-Limpieza/finalizacion que se hace aqui (lo que el notebook dejo pendiente):
-  • Elimina la columna cruda sobrante  '...:Nombre de Moneda'.
-  • Descarta `proveedor_fuera_region` (100% NaN en la corrida del notebook).
-  • Filtra adjudicaciones sin monto en PEN o sin fecha (no situables).
-  • Imputa NaN de forma razonada:
-        - campos de contrato (monto_contrato, duracion) -> 0  (no se firmo)
-        - num_contratos_previos / montos acumulados      -> 0  (primer contrato)
-        - dias_plazo / porc_adjudicado                    -> mediana
-  • Recorta `porc_adjudicado` a [0, 300] (hay valores de 10 000 % por error;
-    se conserva >120 % como senal de sobrecosto).
-  • log1p a las variables monetarias (rango 1 .. 4.8e10) antes de escalar.
-  • Normalizacion Min-Max 0-1 de las 12 features -> matriz para PCA.
-  • Score de riesgo = suma de alertas (sobrecosto + plazo corto + sin competencia).
+Completa la limpieza pendiente, construye el vector PCA-ready (log montos +
+Min-Max) y lo serializa a  data/cp_data.js  (window.CP_DATA).
 
-Ejecutar:
-    python build_data.py [ruta_al_parquet]
-Si no se pasa ruta, busca `adjudicaciones_procesadas.parquet` en ubicaciones
-habituales (ver CANDIDATES).
+Adaptaciones automáticas según el esquema disponible:
+  - Los flags de riesgo (sobrecosto / sin competencia / plazo corto) se
+    RECALCULAN desde porc_adjudicado, num_licitantes_final y dias_plazo
+    (columnas presentes en ambas tablas), aunque no existan las columnas alerta_*.
+  - Si no hay `fecha_adjudicacion`  -> meta.has_time = False (el cuadrante D del
+    prototipo muestra el histograma de nº de postores en lugar de la serie).
+  - Si no hay `nombre_proveedor` / `dept_entidad` -> el tooltip los omite.
+
+Ejecutar:  python build_data.py [ruta_al_parquet]
 """
 
 import json
@@ -39,14 +34,10 @@ from sklearn.preprocessing import MinMaxScaler
 HERE = Path(__file__).resolve().parent
 OUT_JS = HERE / "data" / "cp_data.js"
 
-CANDIDATES = [
-    HERE / "adjudicaciones_procesadas.parquet",
-    HERE.parent / "adjudicaciones_procesadas.parquet",
-    HERE.parent.parent / "adjudicaciones_procesadas.parquet",
-    HERE / "data" / "adjudicaciones_procesadas.parquet",
-]
+PARQUET_NAMES = ["adjudicaciones_procesadas.parquet", "matriz_modelo.parquet"]
+CANDIDATES = [d / n for d in (HERE, HERE.parent, HERE.parent.parent, HERE / "data")
+              for n in PARQUET_NAMES]
 
-# Feature -> transformacion antes de Min-Max ('log' = log1p, 'lin' = tal cual)
 FEATURE_DEF = [
     ("monto_adjudicado_pen",   "log"),
     ("monto_referencial_pen",  "log"),
@@ -62,8 +53,6 @@ FEATURE_DEF = [
     ("metodo_desconocido",     "lin"),
 ]
 FEATURES = [f for f, _ in FEATURE_DEF]
-
-ALERTS = ["alerta_sobrecosto", "alerta_plazo_corto", "alerta_sin_competencia"]
 JUNK_COL = "Entrega compilada:Adjudicaciones:Valor:Nombre de Moneda"
 
 
@@ -81,11 +70,20 @@ def find_parquet() -> Path:
         if c.exists():
             return c
     sys.exit(
-        "ERROR: no se encontro 'adjudicaciones_procesadas.parquet'.\n"
-        "  Ejecuta primero el notebook fase1_Preprocesamiento.ipynb para generarlo,\n"
-        "  o pasa la ruta:  python build_data.py C:/ruta/adjudicaciones_procesadas.parquet\n"
-        "  (Para una demo sin datos reales:  python make_sample_data.py)"
+        "ERROR: no se encontró el parquet de entrada.\n"
+        "  Esperaba 'adjudicaciones_procesadas.parquet' o 'matriz_modelo.parquet'.\n"
+        "  Ejecuta el notebook fase1_Preprocesamiento.ipynb o pasa la ruta:\n"
+        "    python build_data.py C:/ruta/adjudicaciones_procesadas.parquet"
     )
+
+
+def encode(df, col, fillna="(s/d)"):
+    if col not in df.columns:
+        return [0] * len(df), ["(no disponible)"], False
+    s = df[col].astype("object").where(df[col].notna(), fillna).astype(str)
+    levels = sorted(s.unique().tolist())
+    idx = s.map({v: i for i, v in enumerate(levels)}).astype(int)
+    return idx.tolist(), levels, True
 
 
 def main():
@@ -97,67 +95,61 @@ def main():
     df = pd.read_parquet(pq)
     log(f"      {len(df):,} filas × {df.shape[1]} columnas")
 
-    # ── Limpieza pendiente ───────────────────────────────────────────────
-    log("\n[2/5] Limpieza/finalizacion (lo que faltaba)...")
-    df = df.drop(columns=[JUNK_COL], errors="ignore")
-    df = df.drop(columns=["proveedor_fuera_region", "alerta_proveedor_lejano"],
-                 errors="ignore")  # 100% NaN en la corrida del notebook
+    # ── Limpieza/finalización ────────────────────────────────────────────
+    log("\n[2/5] Limpieza/finalización...")
+    df = df.drop(columns=[JUNK_COL, "proveedor_fuera_region", "alerta_proveedor_lejano"],
+                 errors="ignore")
 
-    df["fecha_adjudicacion"] = pd.to_datetime(df.get("fecha_adjudicacion"), errors="coerce")
+    has_time = "fecha_adjudicacion" in df.columns
     n0 = len(df)
-    df = df[df["monto_adjudicado_pen"].notna() & df["fecha_adjudicacion"].notna()].copy()
-    log(f"      Filtradas {n0 - len(df):,} sin monto PEN o sin fecha -> {len(df):,} filas")
+    df["monto_adjudicado_pen"] = pd.to_numeric(df["monto_adjudicado_pen"], errors="coerce")
+    keep = df["monto_adjudicado_pen"].notna()
+    if has_time:
+        df["fecha_adjudicacion"] = pd.to_datetime(df["fecha_adjudicacion"], errors="coerce")
+        keep &= df["fecha_adjudicacion"].notna()
+    df = df[keep].copy()
+    log(f"      Filtradas {n0 - len(df):,} filas sin monto PEN" +
+        (" / sin fecha" if has_time else "") + f" -> {len(df):,} filas")
+    log(f"      Fecha disponible (serie temporal): {has_time}")
 
     # Imputaciones razonadas
-    for c in ["monto_contrato", "duracion_contrato_dias",
-              "num_contratos_previos", "monto_acum_proveedor", "monto_promedio_previo",
+    for c in ["monto_contrato", "duracion_contrato_dias", "num_contratos_previos",
+              "monto_acum_proveedor", "monto_promedio_previo",
               "es_consorcio", "tiene_contrato", "metodo_desconocido"]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
-    for c in ["dias_plazo"]:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-        df[c] = df[c].fillna(df[c].median())
-    df["porc_adjudicado"] = pd.to_numeric(df["porc_adjudicado"], errors="coerce")
+    df["dias_plazo"] = pd.to_numeric(df.get("dias_plazo"), errors="coerce")
+    df["dias_plazo"] = df["dias_plazo"].fillna(df["dias_plazo"].median())
+    df["porc_adjudicado"] = pd.to_numeric(df.get("porc_adjudicado"), errors="coerce")
     df["porc_adjudicado"] = df["porc_adjudicado"].fillna(df["porc_adjudicado"].median()).clip(0, 300)
-    df["num_licitantes_final"] = pd.to_numeric(df["num_licitantes_final"], errors="coerce").fillna(1)
+    df["num_licitantes_final"] = pd.to_numeric(df.get("num_licitantes_final"), errors="coerce").fillna(1)
     for c in FEATURES:
         if c not in df.columns:
             df[c] = 0.0
-            log(f"      ⚠ columna ausente '{c}' -> rellenada con 0")
+            log(f"      ⚠ feature ausente '{c}' -> 0")
 
-    # Score de riesgo (0-3) y bitmask de alertas
-    for a in ALERTS:
-        df[a] = pd.to_numeric(df.get(a), errors="coerce").fillna(0).astype(int).clip(0, 1)
-    df["riesgo"] = df[ALERTS].sum(axis=1).astype(int)
-    df["alert_mask"] = (df["alerta_sobrecosto"]
-                        + 2 * df["alerta_plazo_corto"]
-                        + 4 * df["alerta_sin_competencia"]).astype(int)
+    # ── Riesgo: RECALCULADO desde columnas siempre presentes ─────────────
+    a_sobre = (df["porc_adjudicado"] > 120).astype(int)
+    a_sincomp = (df["num_licitantes_final"] == 1).astype(int)
+    a_plazo = df["dias_plazo"].between(-1, 2).astype(int)
+    df["riesgo"] = (a_sobre + a_sincomp + a_plazo).astype(int)
+    df["alert_mask"] = (a_sobre + 2 * a_plazo + 4 * a_sincomp).astype(int)
 
-    # ── Matriz de features para PCA ──────────────────────────────────────
-    log("\n[3/5] Transformacion (log montos) + Min-Max...")
+    # ── Matriz PCA ───────────────────────────────────────────────────────
+    log("\n[3/5] Transformación (log montos) + Min-Max...")
     M = np.zeros((len(df), len(FEATURE_DEF)), dtype=float)
     for j, (feat, tr) in enumerate(FEATURE_DEF):
         col = pd.to_numeric(df[feat], errors="coerce").fillna(0).to_numpy(dtype=float)
         M[:, j] = np.log1p(np.clip(col, 0, None)) if tr == "log" else col
-    scaler = MinMaxScaler()
-    Xn = scaler.fit_transform(M)
+    Xn = MinMaxScaler().fit_transform(M)
     log(f"      {len(FEATURES)} features normalizadas en [0,1]")
 
-    # ── Categoricas -> indices + niveles ─────────────────────────────────
-    log("\n[4/5] Codificacion de categoricas y arrays de visualizacion...")
-
-    def encode(series, fillna="(s/d)"):
-        s = series.astype("object").where(series.notna(), fillna).astype(str)
-        levels = sorted(s.unique().tolist())
-        idx = s.map({v: i for i, v in enumerate(levels)}).astype(int)
-        return idx.tolist(), levels
-
-    metodo_idx, metodo_lv = encode(df.get("metodo_contratacion_limpio", pd.Series(index=df.index)))
-    categ_idx,  categ_lv  = encode(df.get("categoria_principal", pd.Series(index=df.index)))
-    dept_idx,   dept_lv   = encode(df.get("dept_entidad", pd.Series(index=df.index)))
-    prov_idx,   prov_lv   = encode(df.get("nombre_proveedor", pd.Series(index=df.index)))
-
-    t_ms = df["fecha_adjudicacion"].values.astype("datetime64[ms]").astype("int64")
+    # ── Categóricas + arrays de visualización ────────────────────────────
+    log("\n[4/5] Codificación y arrays de visualización...")
+    metodo_idx, metodo_lv, _ = encode(df, "metodo_contratacion_limpio")
+    categ_idx,  categ_lv,  _ = encode(df, "categoria_principal")
+    dept_idx,   dept_lv,  has_dept = encode(df, "dept_entidad")
+    prov_idx,   prov_lv,  has_prov = encode(df, "nombre_proveedor")
 
     def disp(col, ndig=2):
         return [round(float(v), ndig) for v in pd.to_numeric(df[col], errors="coerce").fillna(0)]
@@ -165,33 +157,24 @@ def main():
     payload = {
         "meta": {
             "label": "Contrataciones Perú 2025 (OCDS / SEACE)",
-            "note": f"{len(df):,} adjudicaciones · features log+MinMax · riesgo=alertas(0-3)",
+            "note": f"{len(df):,} adjudicaciones · {pq.name} · features log+MinMax · riesgo 0-3",
             "features": FEATURES,
-            "methods": metodo_lv,
-            "categories": categ_lv,
-            "depts": dept_lv,
-            "providers": prov_lv,
+            "methods": metodo_lv, "categories": categ_lv,
+            "depts": dept_lv, "providers": prov_lv,
             "alerts": ["Sobrecosto", "Plazo corto", "Sin competencia"],
+            "has_time": bool(has_time), "has_prov": bool(has_prov), "has_dept": bool(has_dept),
             "n": int(len(df)),
         },
-        "t": t_ms.tolist(),
-        "metodo": metodo_idx,
-        "categoria": categ_idx,
-        "dept": dept_idx,
-        "prov": prov_idx,
-        "riesgo": df["riesgo"].tolist(),
-        "amask": df["alert_mask"].tolist(),
-        # valores originales para histogramas / tooltip
-        "monto":    disp("monto_adjudicado_pen", 2),
-        "montoref": disp("monto_referencial_pen", 2),
-        "porc":     disp("porc_adjudicado", 1),
-        "numlic":   [int(v) for v in df["num_licitantes_final"]],
-        "dias":     disp("dias_plazo", 0),
-        "dur":      disp("duracion_contrato_dias", 0),
-        # matriz normalizada (columnar) para PCA
+        "metodo": metodo_idx, "categoria": categ_idx, "dept": dept_idx, "prov": prov_idx,
+        "riesgo": df["riesgo"].tolist(), "amask": df["alert_mask"].tolist(),
+        "monto": disp("monto_adjudicado_pen", 2), "montoref": disp("monto_referencial_pen", 2),
+        "porc": disp("porc_adjudicado", 1), "numlic": [int(v) for v in df["num_licitantes_final"]],
+        "dias": disp("dias_plazo", 0), "dur": disp("duracion_contrato_dias", 0),
         "X": [[round(float(Xn[i, j]), 4) for i in range(Xn.shape[0])]
               for j in range(Xn.shape[1])],
     }
+    if has_time:
+        payload["t"] = df["fecha_adjudicacion"].values.astype("datetime64[ms]").astype("int64").tolist()
 
     log("\n[5/5] Serializando data/cp_data.js ...")
     OUT_JS.parent.mkdir(parents=True, exist_ok=True)
@@ -199,14 +182,14 @@ def main():
                       encoding="utf-8")
     size_mb = OUT_JS.stat().st_size / (1024 * 1024)
 
-    # Validacion
     assert Xn.min() >= -1e-9 and Xn.max() <= 1 + 1e-9, "Min-Max fuera de [0,1]"
     assert not np.isnan(Xn).any(), "Quedan NaN en la matriz"
     log(f"      -> {OUT_JS}  ({size_mb:.2f} MB)")
-    log(f"      registros={len(df):,}  metodos={metodo_lv}")
+    log(f"      registros={len(df):,}  has_time={has_time}  has_prov={has_prov}  has_dept={has_dept}")
+    log(f"      métodos={metodo_lv}")
     log(f"      riesgo (conteo): {df['riesgo'].value_counts().sort_index().to_dict()}")
     log("\n" + "=" * 66)
-    log("  LISTO. Abre contrataciones/prototipo/index.html")
+    log("  LISTO. Abre cts/prototipo/index.html")
     log("=" * 66)
 
 

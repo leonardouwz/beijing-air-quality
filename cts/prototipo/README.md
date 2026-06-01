@@ -25,24 +25,28 @@ python -m http.server 8124       # http://127.0.0.1:8124/index.html
 
 ## Generar los datos (pipeline)
 
-```
-fase1_Preprocesamiento.ipynb  ──►  adjudicaciones_procesadas.parquet  ──►  build_data.py  ──►  data/cp_data.js
-   (notebook de la compañera)        (tabla de adjudicaciones, 38 cols)      (limpieza final + PCA-ready)
-```
+`build_data.py` **autodetecta** cuál de las dos salidas del notebook está presente:
 
-### Con datos REALES
-1. Ejecuta el notebook `fase1_Preprocesamiento.ipynb` en la máquina que tiene la
-   carpeta `usar/` (genera `adjudicaciones_procesadas.parquet`).
-2. Apunta el script a ese parquet:
-   ```bash
-   python build_data.py "C:/ruta/a/adjudicaciones_procesadas.parquet"
-   ```
-   (sin argumento, busca el parquet en el directorio del prototipo y los padres).
+| Parquet de entrada | Cols | Modo del prototipo |
+|---|---|---|
+| `adjudicaciones_procesadas.parquet` | 38 | **Completo**: cuadrante D = serie temporal; tooltip con proveedor, departamento y fecha. |
+| `matriz_modelo.parquet` | 20 | **Reducido**: NO trae fecha/proveedor/departamento/alertas. El cuadrante D pasa a ser **histograma de nº de postores**; el riesgo se **recalcula** desde `porc_adjudicado`, `num_licitantes_final` y `dias_plazo`. |
+
+> El dataset actualmente cargado (`data/cp_data.js`) se generó desde
+> **`matriz_modelo.parquet`** (64 170 adjudicaciones). Para obtener la serie
+> temporal y el proveedor/departamento en el tooltip, regenera con
+> `adjudicaciones_procesadas.parquet`.
+
+### Ejecutar
+```bash
+python build_data.py                       # busca el parquet automáticamente
+python build_data.py "C:/ruta/al.parquet"  # o indícalo explícitamente
+```
 
 ### Demo SIN datos reales
 ```bash
-python make_sample_data.py     # crea un parquet sintético con el mismo esquema
-python build_data.py           # -> data/cp_data.js
+python make_sample_data.py     # crea un adjudicaciones_procesadas.parquet sintético
+python build_data.py
 ```
 
 ---

@@ -104,7 +104,7 @@
       <div class="plot" id="plotC"><svg id="svgC"></svg></div>
     </div>
     <div class="quad quad-D">
-      <h2>D · Línea temporal de adjudicaciones <span class="sub">monto vs fecha (2025) · color = selección</span></h2>
+      <h2 id="hD">D · Línea temporal de adjudicaciones <span class="sub">monto vs fecha (2025) · color = selección</span></h2>
       <div class="plot" id="plotD"><canvas id="canvasD"></canvas><svg id="svgD"></svg></div>
     </div>
   </div>
@@ -130,6 +130,7 @@
   }
 
   const FEAT = D.meta.features, N = D.meta.n;
+  const hasTime = !!D.meta.has_time;   // ¿hay fecha_adjudicacion? -> serie temporal o histograma de postores
   const RISK_COL = { 0:"#22c55e", 1:"#eab308", 2:"#f97316", 3:"#ef4444" };
   const PAL = d3.schemeTableau10;
   const fmtMoney = (v) => {
@@ -262,7 +263,7 @@
   }
   let raf=null;
   function scheduleRedraw(){ if (raf) return; raf=requestAnimationFrame(()=>{ raf=null;
-    drawA(); drawHist(B); drawHist(C); drawD(); updateSelbar(); }); }
+    drawA(); drawHist(B); drawHist(C); drawDquad(); updateSelbar(); }); }
   function clearSelection(){ selected=null; if (A.brushG) A.brushG.call(A.brush.move,null); scheduleRedraw(); }
 
   // ═══════════ HISTOGRAMAS (B monto logx, C porc lineal) ═══════════
@@ -352,6 +353,12 @@
     if (hasSel){ ctx.fillStyle="#f43f5e"; for (const i of selected) ctx.fillRect(D2.tx[i]-1.7,D2.ty[i]-1.7,3.4,3.4); }
   }
 
+  // El cuadrante D es serie temporal si hay fecha; si no (p.ej. matriz_modelo),
+  // se reemplaza por el histograma de nº de postores (competencia).
+  const Dhist = { plot:"plotD", svg_id:"svgD", key:"numlic" };
+  function setupDquad(){ if (hasTime) setupD(); else { document.getElementById("canvasD").style.display="none"; setupHist(Dhist); } }
+  function drawDquad(){ if (hasTime) drawD(); else drawHist(Dhist); }
+
   // ═══════════ Tooltip ═══════════
   const tip=document.getElementById("tooltip");
   function hoverMove(event){ const [mx,my]=d3.pointer(event,document.getElementById("svgA"));
@@ -359,15 +366,18 @@
   function alertsText(mask){ const a=[]; if(mask&1)a.push("Sobrecosto"); if(mask&2)a.push("Plazo corto"); if(mask&4)a.push("Sin competencia"); return a; }
   function showTip(event,i) {
     const al=alertsText(D.amask[i]);
-    tip.innerHTML = `<b>${D.meta.providers[D.prov[i]]}</b><br>
-      <span style="color:var(--ink-dim)">${D.meta.methods[D.metodo[i]]} · ${D.meta.categories[D.categoria[i]]} · ${D.meta.depts[D.dept[i]]}</span>
-      <table>
+    const head = D.meta.has_prov ? D.meta.providers[D.prov[i]] : "Adjudicación";
+    const ctx = [D.meta.methods[D.metodo[i]], D.meta.categories[D.categoria[i]]];
+    if (D.meta.has_dept) ctx.push(D.meta.depts[D.dept[i]]);
+    let rows = `
         <tr><td class="k">Monto adj.</td><td class="v">${fmtMoney(D.monto[i])}</td></tr>
         <tr><td class="k">% del ref.</td><td class="v">${D.porc[i].toFixed(1)}%</td></tr>
         <tr><td class="k">Postores</td><td class="v">${D.numlic[i]}</td></tr>
-        <tr><td class="k">Días plazo</td><td class="v">${D.dias[i]}</td></tr>
-        <tr><td class="k">Fecha</td><td class="v">${new Date(D.t[i]).toISOString().slice(0,10)}</td></tr>
-      </table>${al.length?`<div class="alert">⚠ ${al.join(" · ")}</div>`:""}`;
+        <tr><td class="k">Días plazo</td><td class="v">${D.dias[i]}</td></tr>`;
+    if (hasTime) rows += `<tr><td class="k">Fecha</td><td class="v">${new Date(D.t[i]).toISOString().slice(0,10)}</td></tr>`;
+    tip.innerHTML = `<b>${head}</b><br>
+      <span style="color:var(--ink-dim)">${ctx.join(" · ")}</span>
+      <table>${rows}</table>${al.length?`<div class="alert">⚠ ${al.join(" · ")}</div>`:""}`;
     tip.style.display="block";
     const pad=14; let x=event.clientX+pad, yv=event.clientY+pad; const r=tip.getBoundingClientRect();
     if (x+r.width>window.innerWidth) x=event.clientX-r.width-pad;
@@ -407,14 +417,17 @@
   const B={plot:"plotB",svg_id:"svgB",key:"monto",logx:true};
   const C={plot:"plotC",svg_id:"svgC",key:"porc",pct:true,ref:120,refLabel:"120% sobrecosto"};
 
-  function buildAll(){ setupA(); setupHist(B); setupHist(C); setupD(); drawA(); drawHist(B); drawHist(C); drawD(); updateSelbar(); }
-  function rebuild(){ setupA(); setupHist(B); setupHist(C); setupD(); if (A.brushG) A.brushG.call(A.brush); drawA(); drawHist(B); drawHist(C); drawD(); updateSelbar(); }
+  function buildAll(){ setupA(); setupHist(B); setupHist(C); setupDquad(); drawA(); drawHist(B); drawHist(C); drawDquad(); updateSelbar(); }
+  function rebuild(){ setupA(); setupHist(B); setupHist(C); setupDquad(); if (A.brushG) A.brushG.call(A.brush); drawA(); drawHist(B); drawHist(C); drawDquad(); updateSelbar(); }
 
   document.getElementById("colorBy").addEventListener("change",(e)=>{ colorMode=e.target.value; renderLegend(); renderBaseA(); drawA(); });
   document.getElementById("reset").addEventListener("click",clearSelection);
   let rt=null; window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(rebuild,180); });
 
   document.getElementById("subtitle").textContent = `${D.meta.label} · ${D.meta.note}`;
+  document.getElementById("hD").innerHTML = hasTime
+    ? `D · Línea temporal de adjudicaciones <span class="sub">monto (log) vs fecha · color = selección</span>`
+    : `D · Número de postores (competencia) <span class="sub">gris = total, color = selección · sin fecha en este dataset</span>`;
   computePCA(); renderLegend(); renderGlobal(); buildAll();
   document.getElementById("loader").style.display="none";
   console.log(`[Contrataciones] PCA listo. N=${N}, var(PC1+PC2)=${((pcs[0].ratio+pcs[1].ratio)*100).toFixed(1)}%`);
