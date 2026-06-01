@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Diabetes · Mapa de Riesgo — Visual Analytics</title>
+<style>
+  :root {
+    --bg:#eef2f7; --card:#ffffff; --ink:#1f2933; --ink-dim:#64748b; --line:#e2e8f0;
+    --teal:#14b8a6; --coral:#f43f5e; --violet:#6366f1; --amber:#f59e0b;
+    --shadow:0 1px 3px rgba(15,23,42,.08), 0 6px 18px rgba(15,23,42,.06);
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif; overflow:hidden; }
+  #app { display:flex; height:100vh; }
+
+  /* ── Sidebar (diferente: panel vertical a la izquierda) ── */
+  aside { width:288px; flex:0 0 288px; background:var(--card); border-right:1px solid var(--line);
+    padding:20px 18px; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand .pulse { width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(135deg,var(--teal),var(--violet)); display:flex; align-items:center;
+    justify-content:center; color:#fff; font-weight:800; font-size:15px; }
+  .brand h1 { font-size:16px; margin:0; font-weight:750; letter-spacing:-.2px; }
+  .brand p { margin:1px 0 0; font-size:10.5px; color:var(--ink-dim); }
+  .group { display:flex; flex-direction:column; gap:8px; }
+  .group > .lbl { font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-dim); font-weight:700; }
+  select, button { font:inherit; font-size:13px; padding:8px 10px; border-radius:9px;
+    border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; width:100%; }
+  select:hover, button:hover { border-color:var(--violet); }
+  button.ghost { background:#f1f5f9; }
+  .legend { display:flex; flex-direction:column; gap:7px; font-size:12px; }
+  .legend .it { display:flex; align-items:center; gap:8px; color:var(--ink-dim); }
+  .legend .sw { width:13px; height:13px; border-radius:4px; }
+  .gradbar { height:11px; border-radius:6px; }
+  .kpis { display:flex; flex-direction:column; gap:10px; }
+  .kpi { background:#f8fafc; border:1px solid var(--line); border-radius:11px; padding:10px 12px; }
+  .kpi .v { font-size:22px; font-weight:780; letter-spacing:-.5px; }
+  .kpi .v small { font-size:12px; color:var(--ink-dim); font-weight:600; }
+  .kpi .t { font-size:11px; color:var(--ink-dim); margin-top:1px; }
+  .selrows { font-size:12px; color:var(--ink-dim); display:flex; flex-direction:column; gap:5px; }
+  .selrows .r { display:flex; justify-content:space-between; }
+  .selrows .r b { color:var(--ink); font-weight:650; }
+  aside .foot { margin-top:auto; font-size:10px; color:#94a3b8; line-height:1.4; }
+
+  /* ── Main: scatter arriba, 3 paneles abajo (orden distinto) ── */
+  main { flex:1; display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1.45fr 1fr;
+    gap:14px; padding:16px; min-width:0; }
+  .card { background:var(--card); border-radius:14px; box-shadow:var(--shadow); padding:12px 14px;
+    display:flex; flex-direction:column; min-width:0; min-height:0; position:relative; }
+  .card.scatter { grid-column:1 / 4; grid-row:1; }
+  .card h2 { margin:0 0 2px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .card h2 .n { width:20px; height:20px; border-radius:6px; background:var(--violet); color:#fff;
+    font-size:11px; display:inline-flex; align-items:center; justify-content:center; font-weight:800; }
+  .card h2 .sub { font-size:10.5px; color:var(--ink-dim); font-weight:500; }
+  .plot { flex:1; position:relative; min-height:0; }
+  .axis text { fill:var(--ink-dim); font-size:10px; }
+  .axis path, .axis line { stroke:#cbd5e1; }
+  .grid line { stroke:#eef2f7; }
+  .brush .selection { stroke:var(--violet); fill:var(--violet); fill-opacity:.08; }
+
+  .tooltip { position:fixed; pointer-events:none; z-index:50; display:none; background:#fff;
+    border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:11.5px;
+    box-shadow:0 8px 26px rgba(15,23,42,.18); max-width:240px; }
+  .tooltip .hd { font-weight:750; margin-bottom:4px; }
+  .tooltip .hd.si { color:var(--coral); } .tooltip .hd.no { color:var(--teal); }
+  .tooltip table { border-collapse:collapse; } .tooltip td { padding:1px 6px 1px 0; }
+  .tooltip td.k { color:var(--ink-dim); } .tooltip td.v { text-align:right; font-weight:600; }
+
+  /* Panel de prevalencia (módulo 4) */
+  .prevwrap { flex:1; display:flex; flex-direction:column; justify-content:center; gap:12px; }
+  .bigpct { font-size:38px; font-weight:800; letter-spacing:-1px; line-height:1; color:var(--coral); }
+  .bigpct small { font-size:13px; color:var(--ink-dim); font-weight:600; }
+  .cmp { display:flex; flex-direction:column; gap:7px; font-size:11px; color:var(--ink-dim); }
+  .cmp .bar { height:13px; border-radius:7px; background:#eef2f7; overflow:hidden; }
+  .cmp .bar > span { display:block; height:100%; border-radius:7px; }
+  .mini { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:11px; color:var(--ink-dim); }
+  .mini .r { display:flex; justify-content:space-between; } .mini .r b { color:var(--ink); }
+  #loader { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:var(--bg); z-index:100; flex-direction:column; gap:12px; color:var(--ink-dim); }
+  .spin { width:30px; height:30px; border:3px solid var(--line); border-top-color:var(--violet);
+    border-radius:50%; animation:s .8s linear infinite; } @keyframes s { to { transform:rotate(360deg);} }
+  #err { color:var(--coral); font-size:13px; max-width:520px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside>
+    <div class="brand">
+      <div class="pulse">✚</div>
+      <div><h1>Diabetes · Mapa de Riesgo</h1><p id="subtitle">BRFSS-2015</p></div>
+    </div>
+
+    <div class="group">
+      <span class="lbl">Colorear puntos por</span>
+      <select id="colorBy">
+        <option value="diabetes" selected>Diagnóstico de diabetes</option>
+        <option value="IMC">IMC (masa corporal)</option>
+        <option value="Salud_General">Salud general</option>
+        <option value="Edad">Edad</option>
+      </select>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="group">
+      <span class="lbl">Población</span>
+      <div class="kpis">
+        <div class="kpi"><div class="v" id="kN">—</div><div class="t">encuestados (muestra PCA)</div></div>
+        <div class="kpi"><div class="v" id="kPrev">—</div><div class="t">prevalencia de diabetes</div></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="lbl">Selección actual</span>
+      <div class="selrows" id="selrows">
+        <div class="r"><span>Sin selección</span></div>
+        <div style="font-size:10.5px">Arrastra un recuadro sobre el mapa para filtrar los paneles.</div>
+      </div>
+      <button class="ghost" id="reset">Limpiar selección</button>
+    </div>
+
+    <div class="foot">PCA (x,y) calculado en el notebook <code>correccion.ipynb</code> sobre
+      8 variables estandarizadas. Este prototipo lo explora con linking &amp; brushing.</div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+    <div class="card scatter">
+      <h2><span class="n">1</span> Espacio latente de salud (PCA) <span class="sub" id="scatterSub"></span></h2>
+      <div class="plot" id="plotS"><svg id="svgS"></svg></div>
+    </div>
+    <div class="card">
+      <h2><span class="n">2</span> Índice de masa corporal (IMC)</h2>
+      <div class="plot" id="plotI"><svg id="svgI"></svg></div>
+    </div>
+    <div class="card">
+      <h2><span class="n">3</span> Edad (rangos)</h2>
+      <div class="plot" id="plotE"><svg id="svgE"></svg></div>
+    </div>
+    <div class="card">
+      <h2><span class="n">4</span> Riesgo de diabetes <span class="sub">selección vs población</span></h2>
+      <div class="prevwrap">
+        <div><span class="bigpct" id="prevPct">—</span> <small>con diabetes en la selección</small></div>
+        <div class="cmp" id="cmp"></div>
+        <div class="mini" id="mini"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<div id="loader"><div class="spin"></div><div>Cargando mapa de riesgo…</div><div id="err"></div></div>
+
+<script src="vendor/d3.v7.min.js"></script>
+<script src="data/db_data.js"></script>
+<script>
+"use strict";
+(function () {
+  const err = document.getElementById("err");
+  if (!window.d3) { err.textContent = "No se pudo cargar D3 (vendor/d3.v7.min.js)."; return; }
+  const DB = window.DB_DATA;
+  if (!DB || !DB.x) { err.textContent = "No se pudo cargar data/db_data.js. Ejecuta:  python build_data.py"; return; }
+
+  const N = DB.meta.n, X = DB.x, Y = DB.y, DIAB = DB.diabetes, F = DB.feats;
+  const EDAD = DB.meta.edad_labels, SALUD = DB.meta.salud_labels, PREV_G = DB.meta.prevalencia;
+  const COL_NO = "#14b8a6", COL_SI = "#f43f5e", SELC = "#6366f1";
+
+  let colorMode = "diabetes";
+  let selected = null;
+
+  // ── Escalas de color por modo ──
+  const cIMC   = d3.scaleSequential(d3.interpolateYlOrRd).domain(DB.meta.ranges.IMC || [12, 60]);
+  const cEdad  = d3.scaleSequential(d3.interpolateViridis).domain(DB.meta.ranges.Edad || [1, 13]);
+  const cSalud = d3.scaleSequential(t => d3.interpolateRdYlGn(1 - t)).domain([1, 5]);
+  function colorOf(i) {
+    if (colorMode === "diabetes") return DIAB[i] ? COL_SI : COL_NO;
+    if (colorMode === "IMC")      return cIMC(F.IMC[i]);
+    if (colorMode === "Edad")     return cEdad(F.Edad[i]);
+    return cSalud(F.Salud_General[i]);
+  }
+
+  // ── Leyenda dinámica ──
+  function renderLegend() {
+    const el = document.getElementById("legend");
+    if (colorMode === "diabetes") {
+      el.innerHTML = `<div class="it"><span class="sw" style="background:${COL_NO}"></span>Sin diabetes</div>
+                      <div class="it"><span class="sw" style="background:${COL_SI}"></span>Con diabetes</div>`;
+      return;
+    }
+    const ramp = colorMode==="IMC" ? cIMC : colorMode==="Edad" ? cEdad : cSalud;
+    const dom = colorMode==="Salud_General" ? [1,5] : DB.meta.ranges[colorMode];
+    const stops = d3.range(0,1.001,0.1).map(t=>ramp(dom[0]+t*(dom[1]-dom[0]))).join(",");
+    const loLab = colorMode==="Salud_General" ? "Excelente" : Math.round(dom[0]);
+    const hiLab = colorMode==="Salud_General" ? "Mala" : (colorMode==="Edad"?"80+":Math.round(dom[1]));
+    el.innerHTML = `<div class="gradbar" style="background:linear-gradient(90deg,${stops})"></div>
+      <div class="it" style="justify-content:space-between"><span>${loLab}</span><span>${hiLab}</span></div>`;
+  }
+
+  // ═══ MÓDULO 1 — Scatter PCA (SVG) ═══
+  const S = { m:{t:8,r:12,b:28,l:38} };
+  function setupS() {
+    const p = document.getElementById("plotS"); S.W=p.clientWidth; S.H=p.clientHeight;
+    S.iw=S.W-S.m.l-S.m.r; S.ih=S.H-S.m.t-S.m.b;
+    S.x=d3.scaleLinear().domain(d3.extent(X)).nice().range([S.m.l,S.m.l+S.iw]);
+    S.y=d3.scaleLinear().domain(d3.extent(Y)).nice().range([S.m.t+S.ih,S.m.t]);
+    S.qt=d3.quadtree().x(i=>S.x(X[i])).y(i=>S.y(Y[i])).addAll(d3.range(N));
+    const svg=d3.select("#svgS").attr("width",S.W).attr("height",S.H); svg.selectAll("*").remove();
+    svg.append("g").attr("class","grid").attr("transform",`translate(0,${S.m.t+S.ih})`)
+      .call(d3.axisBottom(S.x).ticks(8).tickSize(-S.ih).tickFormat(""));
+    svg.append("g").attr("class","grid").attr("transform",`translate(${S.m.l},0)`)
+      .call(d3.axisLeft(S.y).ticks(6).tickSize(-S.iw).tickFormat(""));
+    svg.append("g").attr("class","axis").attr("transform",`translate(0,${S.m.t+S.ih})`).call(d3.axisBottom(S.x).ticks(8));
+    svg.append("g").attr("class","axis").attr("transform",`translate(${S.m.l},0)`).call(d3.axisLeft(S.y).ticks(6));
+    S.dots = svg.append("g").selectAll("circle").data(d3.range(N)).join("circle")
+      .attr("cx",i=>S.x(X[i])).attr("cy",i=>S.y(Y[i])).attr("r",2.8).attr("stroke","none")
+      .on("mouseover",(e,i)=>showTip(e,i)).on("mousemove",moveTip).on("mouseout",hideTip);
+    S.brush=d3.brush().extent([[S.m.l,S.m.t],[S.m.l+S.iw,S.m.t+S.ih]]).on("brush end",brushed);
+    svg.append("g").attr("class","brush").call(S.brush);
+    document.getElementById("scatterSub").textContent =
+      `${N.toLocaleString("es")} encuestados · PC1 × PC2`;
+    paintDots();
+  }
+  function paintDots() {
+    const has = selected && selected.size>0;
+    S.dots.attr("fill",i=>(has&&!selected.has(i))?"#cbd5e1":colorOf(i))
+      .attr("opacity",i=>has?(selected.has(i)?0.95:0.35):0.72)
+      .attr("r",i=>(has&&selected.has(i))?3.6:2.8);
+  }
+  function brushed({selection}) {
+    if (!selection) { selected=null; redraw(); return; }
+    const [[x0,y0],[x1,y1]]=selection; const s=new Set();
+    S.qt.visit((node,qx0,qy0,qx1,qy1)=>{ if(!node.length){ do{ const i=node.data;
+      const px=S.x(X[i]),py=S.y(Y[i]); if(px>=x0&&px<=x1&&py>=y0&&py<=y1) s.add(i);
+    } while((node=node.next)); } return qx0>x1||qy0>y1||qx1<x0||qy1<y0; });
+    selected = s.size?s:null; redraw();
+  }
+
+  // ═══ MÓDULOS 2 y 3 — Histogramas (IMC continuo, Edad categórico) ═══
+  function setupHist(cfg) {
+    const p=document.getElementById(cfg.plot); cfg.m={t:10,r:12,b:30,l:40};
+    cfg.W=p.clientWidth; cfg.H=p.clientHeight; cfg.iw=cfg.W-cfg.m.l-cfg.m.r; cfg.ih=cfg.H-cfg.m.t-cfg.m.b;
+    cfg.vals=F[cfg.key];
+    const ext=DB.meta.ranges[cfg.key];
+    cfg.x=d3.scaleLinear().domain(cfg.cat?[ext[0]-0.5,ext[1]+0.5]:ext).nice(cfg.cat?null:undefined).range([cfg.m.l,cfg.m.l+cfg.iw]);
+    cfg.bin=d3.bin().domain(cfg.x.domain()).thresholds(cfg.cat?d3.range(ext[0]-0.5,ext[1]+1):28);
+    cfg.popBins=cfg.bin(cfg.vals); cfg.popProp=cfg.popBins.map(b=>b.length/N);
+    cfg.svg=d3.select("#"+cfg.svg_id).attr("width",cfg.W).attr("height",cfg.H); cfg.svg.selectAll("*").remove();
+    cfg.gBody=cfg.svg.append("g");
+    const ax=d3.axisBottom(cfg.x).ticks(6);
+    if (cfg.cat) ax.tickValues(d3.range(ext[0],ext[1]+1,2)).tickFormat(d=>EDAD[d]||d);
+    cfg.svg.append("g").attr("class","axis").attr("transform",`translate(0,${cfg.m.t+cfg.ih})`).call(ax);
+    cfg.yG=cfg.svg.append("g").attr("class","axis").attr("transform",`translate(${cfg.m.l},0)`);
+  }
+  function drawHist(cfg) {
+    const has=selected&&selected.size>0;
+    let selProp=null;
+    if (has){ const sv=[]; for(const i of selected) sv.push(cfg.vals[i]);
+      selProp=cfg.bin(sv).map(b=>b.length/Math.max(sv.length,1)); }
+    const maxY=d3.max(cfg.popProp.concat(selProp||[]))||.01;
+    const y=d3.scaleLinear().domain([0,maxY]).range([cfg.m.t+cfg.ih,cfg.m.t]);
+    cfg.yG.call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".0%")));
+    const bw=b=>Math.max(1,cfg.x(b.x1)-cfg.x(b.x0)-1.5);
+    const pop=cfg.gBody.selectAll("rect.pop").data(cfg.popBins);
+    pop.enter().append("rect").attr("class","pop").merge(pop)
+      .attr("x",b=>cfg.x(b.x0)+0.75).attr("width",bw).attr("rx",2)
+      .attr("y",(b,i)=>y(cfg.popProp[i])).attr("height",(b,i)=>y(0)-y(cfg.popProp[i]))
+      .attr("fill","#dbe3ec");
+    pop.exit().remove();
+    const sd=has?cfg.popBins.map((b,i)=>({b,p:selProp[i]||0})):[];
+    const sel=cfg.gBody.selectAll("rect.sel").data(sd);
+    sel.enter().append("rect").attr("class","sel").merge(sel)
+      .attr("x",d=>cfg.x(d.b.x0)+0.75).attr("width",d=>bw(d.b)).attr("rx",2)
+      .attr("y",d=>y(d.p)).attr("height",d=>y(0)-y(d.p)).attr("fill",SELC).attr("opacity",.85);
+    sel.exit().remove();
+  }
+
+  // ═══ MÓDULO 4 — Prevalencia / riesgo ═══
+  function updatePrev() {
+    const idx = (selected && selected.size) ? [...selected] : d3.range(N);
+    const isSel = !!(selected && selected.size);
+    const prev = 100*d3.mean(idx,i=>DIAB[i]);
+    document.getElementById("prevPct").textContent = prev.toFixed(1)+"%";
+    const selW=Math.min(100,prev), gW=Math.min(100,PREV_G);
+    document.getElementById("cmp").innerHTML =
+      `<div><div style="display:flex;justify-content:space-between"><span>${isSel?"Selección":"Población"}</span><b style="color:var(--ink)">${prev.toFixed(1)}%</b></div>
+         <div class="bar"><span style="width:${selW}%;background:var(--coral)"></span></div></div>
+       <div><div style="display:flex;justify-content:space-between"><span>Población total</span><span>${PREV_G.toFixed(1)}%</span></div>
+         <div class="bar"><span style="width:${gW}%;background:#94a3b8"></span></div></div>`;
+    const pct = (k)=> (100*d3.mean(idx,i=>F[k][i])).toFixed(0)+"%";
+    const imc = d3.mean(idx,i=>F.IMC[i]).toFixed(1);
+    const edadLab = EDAD[Math.round(d3.mean(idx,i=>F.Edad[i]))]||"—";
+    document.getElementById("mini").innerHTML =
+      `<div class="r"><span>IMC medio</span><b>${imc}</b></div>
+       <div class="r"><span>Edad media</span><b>${edadLab}</b></div>
+       <div class="r"><span>Presión alta</span><b>${pct("Presion_Alta")}</b></div>
+       <div class="r"><span>Colesterol alto</span><b>${pct("Colesterol_Alto")}</b></div>
+       <div class="r"><span>Enf. cardiaca</span><b>${pct("Enf_Cardiaca")}</b></div>
+       <div class="r"><span>Dif. caminar</span><b>${pct("Dif_Caminar")}</b></div>`;
+  }
+
+  // ── Tooltip (por punto, nativo SVG) ──
+  const tip=document.getElementById("tooltip");
+  let lastEv=null;
+  function showTip(e,i){ lastEv=e;
+    const si=DIAB[i]===1;
+    tip.innerHTML=`<div class="hd ${si?'si':'no'}">${si?'Con diabetes':'Sin diabetes'}</div>
+      <table>
+        <tr><td class="k">IMC</td><td class="v">${F.IMC[i]}</td></tr>
+        <tr><td class="k">Edad</td><td class="v">${EDAD[F.Edad[i]]||F.Edad[i]}</td></tr>
+        <tr><td class="k">Salud general</td><td class="v">${SALUD[F.Salud_General[i]]||F.Salud_General[i]}</td></tr>
+        <tr><td class="k">Salud física</td><td class="v">${F.Salud_Fisica[i]} d</td></tr>
+        <tr><td class="k">Presión alta</td><td class="v">${F.Presion_Alta[i]?'Sí':'No'}</td></tr>
+        <tr><td class="k">Colesterol alto</td><td class="v">${F.Colesterol_Alto[i]?'Sí':'No'}</td></tr>
+        <tr><td class="k">Enf. cardiaca</td><td class="v">${F.Enf_Cardiaca[i]?'Sí':'No'}</td></tr>
+      </table>`;
+    tip.style.display="block"; moveTip(e);
+  }
+  function moveTip(e){ if(tip.style.display!=="block")return; const pad=14; const r=tip.getBoundingClientRect();
+    let x=e.clientX+pad, y=e.clientY+pad;
+    if(x+r.width>innerWidth) x=e.clientX-r.width-pad; if(y+r.height>innerHeight) y=e.clientY-r.height-pad;
+    tip.style.left=x+"px"; tip.style.top=y+"px"; }
+  function hideTip(){ tip.style.display="none"; }
+
+  // ── Selección (sidebar) ──
+  function updateSel() {
+    const el=document.getElementById("selrows");
+    if (!selected||!selected.size){ el.innerHTML=`<div class="r"><span>Sin selección</span></div>
+      <div style="font-size:10.5px">Arrastra un recuadro sobre el mapa para filtrar los paneles.</div>`; return; }
+    const arr=[...selected], prev=(100*d3.mean(arr,i=>DIAB[i])).toFixed(1);
+    el.innerHTML=`<div class="r"><span>Encuestados</span><b>${arr.length.toLocaleString("es")}</b></div>
+      <div class="r"><span>Con diabetes</span><b style="color:var(--coral)">${prev}%</b></div>
+      <div class="r"><span>vs población</span><b>${PREV_G.toFixed(1)}%</b></div>`;
+  }
+
+  // ── Orquestación ──
+  const I={plot:"plotI",svg_id:"svgI",key:"IMC",cat:false};
+  const E={plot:"plotE",svg_id:"svgE",key:"Edad",cat:true};
+  function redraw(){ paintDots(); drawHist(I); drawHist(E); updatePrev(); updateSel(); }
+  function buildAll(){ setupS(); setupHist(I); setupHist(E); redraw(); }
+
+  document.getElementById("colorBy").addEventListener("change",e=>{ colorMode=e.target.value; renderLegend(); paintDots(); });
+  document.getElementById("reset").addEventListener("click",()=>{ selected=null; d3.select("#svgS .brush").call(S.brush.move,null); redraw(); });
+  let rt; addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(buildAll,180); });
+
+  document.getElementById("subtitle").textContent = DB.meta.note;
+  document.getElementById("kN").textContent = N.toLocaleString("es");
+  document.getElementById("kPrev").innerHTML = PREV_G.toFixed(1)+"<small>%</small>";
+  renderLegend(); buildAll();
+  document.getElementById("loader").style.display="none";
+  console.log(`[Diabetes] listo. N=${N}, prevalencia=${PREV_G}%`);
+})();
+</script>
+</body>
+</html>
