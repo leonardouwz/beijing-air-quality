@@ -10,3 +10,16 @@ dist/
 .aq_cache/
 __pycache__/
 *.mjs
+.venv/
+prototipo/data/*
+notebook/*.png
+python-analysis/*.txt
+python-analysis/*.json
+datasets/*.png
+dbts/prototipo/data/*
+dbts/*.json
+dbts/*.csv
+dbts/*.ipynb
+cts/prototipo/data/*
+cts/*.parquet
+cts/*.csv
