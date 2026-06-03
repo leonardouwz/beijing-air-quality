@@ -16,6 +16,7 @@ notebook/*.png
 python-analysis/*.txt
 python-analysis/*.json
 datasets/*.png
+datasets/*.csv
 dbts/prototipo/data/*
 dbts/*.json
 dbts/*.csv
@@ -23,3 +24,4 @@ dbts/*.ipynb
 cts/prototipo/data/*
 cts/*.parquet
 cts/*.csv
+*.html
