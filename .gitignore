@@ -24,4 +24,4 @@ dbts/*.ipynb
 cts/prototipo/data/*
 cts/*.parquet
 cts/*.csv
-
+cts/usar/*

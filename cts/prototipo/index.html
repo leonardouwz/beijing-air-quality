@@ -5,66 +5,205 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Contrataciones Perú — Espacio de Riesgo (Visual Analytics)</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
   :root {
-    --bg:#0f1419; --panel:#1a212b; --panel-2:#131922; --border:#2a3543;
-    --ink:#e6edf3; --ink-dim:#8b98a5; --accent:#38bdf8; --sel:#f43f5e; --grid:#243040;
+    --bg:       #f8f9fc;
+    --panel:    #ffffff;
+    --panel-2:  #ffffff;
+    --border:   #e4e7f0;
+    --ink:      #111827;
+    --ink-dim:  #6b7280;
+    --accent:   #7c3aed;
+    --sel:      #ec4899;
+    --grid:     #e9ebf4;
+
+    /* Paleta viva por grupo */
+    --c0: #ec4899;   /* rosa fuerte */
+    --c1: #06b6d4;   /* celeste eléctrico */
+    --c2: #eab308;   /* amarillo vivo */
+    --c3: #22c55e;   /* verde lima */
+    --c4: #7c3aed;   /* morado vivo */
+    --c5: #f97316;   /* naranja */
+    --c6: #10b981;   /* esmeralda */
+    --c7: #a855f7;   /* violeta */
+    --c8: #0ea5e9;   /* azul cielo */
+    --c9: #ef4444;   /* rojo */
   }
-  * { box-sizing:border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
-    font-family:"Segoe UI", system-ui, -apple-system, sans-serif; overflow:hidden; }
-  #app { display:flex; flex-direction:column; height:100vh; }
-  header { display:flex; align-items:center; gap:18px; padding:10px 18px;
-    background:var(--panel-2); border-bottom:1px solid var(--border); flex:0 0 auto; }
-  header h1 { font-size:16px; margin:0; font-weight:650; }
-  header h1 small { color:var(--ink-dim); font-weight:400; font-size:11px; display:block; }
-  .spacer { flex:1; }
-  .stat { font-size:11px; color:var(--ink-dim); line-height:1.35; }
-  .stat b { color:var(--ink); font-size:13px; }
-  .ctl { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-dim); }
-  select, button { background:var(--panel); color:var(--ink); border:1px solid var(--border);
-    border-radius:6px; padding:5px 9px; font-size:12px; cursor:pointer; }
-  button:hover, select:hover { border-color:var(--accent); }
-  .legend { display:flex; gap:12px; align-items:center; font-size:11px; flex-wrap:wrap; max-width:380px; }
-  .legend span { display:inline-flex; align-items:center; gap:5px; color:var(--ink-dim); }
-  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
-  .grid { flex:1; display:grid; grid-template-columns:1.3fr 1fr;
-    grid-template-rows:1fr 1fr 0.85fr; gap:10px; padding:10px; min-height:0; }
-  .quad { background:var(--panel); border:1px solid var(--border); border-radius:10px;
-    display:flex; flex-direction:column; min-height:0; min-width:0; position:relative; }
-  .quad-A { grid-column:1; grid-row:1 / 3; }
-  .quad-B { grid-column:2; grid-row:1; }
-  .quad-C { grid-column:2; grid-row:2; }
-  .quad-D { grid-column:1 / 3; grid-row:3; }
-  .quad h2 { font-size:12px; margin:0; padding:8px 12px 4px; font-weight:600;
-    display:flex; align-items:baseline; gap:8px; }
-  .quad h2 .sub { font-size:10.5px; color:var(--ink-dim); font-weight:400; }
-  .plot { flex:1; position:relative; min-height:0; }
-  .plot canvas, .plot svg { position:absolute; top:0; left:0; }
-  .tooltip { position:fixed; pointer-events:none; z-index:50; display:none;
-    background:rgba(13,18,24,.96); border:1px solid var(--accent); border-radius:8px;
-    padding:9px 11px; font-size:11.5px; line-height:1.5; box-shadow:0 6px 22px rgba(0,0,0,.5); max-width:280px; }
-  .tooltip b { color:var(--accent); }
-  .tooltip table { border-collapse:collapse; margin-top:4px; }
-  .tooltip td { padding:1px 6px 1px 0; }
-  .tooltip td.k { color:var(--ink-dim); } .tooltip td.v { color:var(--ink); text-align:right; }
-  .tooltip .alert { color:var(--sel); font-weight:600; }
-  .selbar { position:absolute; top:8px; right:10px; z-index:10; background:rgba(19,25,34,.92);
-    border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:11px;
-    color:var(--ink-dim); max-width:250px; }
-  .selbar b { color:var(--sel); }
-  .selbar .row { display:flex; justify-content:space-between; gap:12px; }
-  .selbar .row span:last-child { color:var(--ink); font-variant-numeric:tabular-nums; }
-  .loadings { padding:4px 12px 10px; font-size:10px; color:var(--ink-dim); }
-  .loadings code { color:var(--accent); }
-  .axis text { fill:var(--ink-dim); font-size:10px; }
-  .axis path, .axis line { stroke:var(--grid); }
-  .brush .selection { stroke:var(--accent); fill:var(--accent); fill-opacity:.08; }
-  #loader { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-    background:var(--bg); z-index:100; flex-direction:column; gap:14px; }
-  .spinner { width:34px; height:34px; border:3px solid var(--border); border-top-color:var(--accent);
-    border-radius:50%; animation:spin .8s linear infinite; }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  #err { color:var(--sel); font-size:13px; max-width:560px; text-align:center; line-height:1.5; }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 18px;
+    background: var(--panel-2);
+    border-bottom: 2px solid var(--border);
+    flex: 0 0 auto;
+    box-shadow: 0 1px 6px rgba(124,58,237,.06);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+  header h1 small { color: var(--ink-dim); font-weight: 400; font-size: 11px; display: block; letter-spacing: 0; }
+
+  .spacer { flex: 1; }
+
+  .stat { font-size: 11px; color: var(--ink-dim); line-height: 1.4; }
+  .stat b { color: var(--ink); font-size: 13px; font-weight: 700; }
+
+  .ctl { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-dim); }
+
+  select, button {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    font-weight: 500;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  select:hover, button:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,58,237,.12);
+  }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  button:hover {
+    background: #6d28d9;
+    border-color: #6d28d9;
+    box-shadow: 0 0 0 3px rgba(124,58,237,.2);
+  }
+
+  .legend { display: flex; gap: 10px; align-items: center; font-size: 11px; flex-wrap: wrap; max-width: 420px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-dim); font-weight: 500; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  /* ── Grid: PCA izquierda (A), dashboard derecha (B+C) ── */
+  .grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    grid-template-rows: 1fr 1fr 0.85fr;
+    gap: 10px;
+    padding: 10px;
+    min-height: 0;
+  }
+
+  /* A = PCA scatter → columna izquierda, filas 1-2 (igual que el original) */
+  .quad-A { grid-column: 1; grid-row: 1 / 3; }
+  /* B = monto → columna derecha, fila 1 */
+  .quad-B { grid-column: 2; grid-row: 1; }
+  /* C = % referencial → columna derecha, fila 2 */
+  .quad-C { grid-column: 2; grid-row: 2; }
+  /* D = timeline → fila 3 full width */
+  .quad-D { grid-column: 1 / 3; grid-row: 3; }
+
+  /* ── Paneles ── */
+  .quad {
+    background: var(--panel);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    display: flex; flex-direction: column;
+    min-height: 0; min-width: 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,.04), 0 0 0 0 transparent;
+    transition: box-shadow .2s;
+  }
+  .quad:hover { box-shadow: 0 4px 20px rgba(124,58,237,.10); }
+
+  /* Barra de color superior por panel */
+  .quad-A::before { content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    background: linear-gradient(90deg, #7c3aed 0%, #ec4899 100%); border-radius:14px 14px 0 0; }
+  .quad-B::before { content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    background: linear-gradient(90deg, #06b6d4 0%, #22c55e 100%); border-radius:14px 14px 0 0; }
+  .quad-C::before { content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    background: linear-gradient(90deg, #eab308 0%, #f97316 100%); border-radius:14px 14px 0 0; }
+  .quad-D::before { content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    background: linear-gradient(90deg, #7c3aed, #06b6d4, #22c55e, #ec4899); border-radius:14px 14px 0 0; }
+
+  .quad h2 {
+    font-size: 12px; margin: 0;
+    padding: 10px 14px 5px;
+    font-weight: 700; display: flex; align-items: baseline; gap: 8px;
+    letter-spacing: -.01em; color: var(--ink);
+  }
+  .quad h2 .sub { font-size: 10.5px; color: var(--ink-dim); font-weight: 400; }
+
+  .plot { flex: 1; position: relative; min-height: 0; }
+  .plot canvas, .plot svg { position: absolute; top: 0; left: 0; }
+
+  /* ── Tooltip ── */
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 50; display: none;
+    background: #fff;
+    border: 2px solid var(--accent);
+    border-radius: 12px;
+    padding: 10px 13px;
+    font-size: 11.5px; line-height: 1.6;
+    box-shadow: 0 8px 30px rgba(124,58,237,.18);
+    max-width: 280px;
+    color: var(--ink);
+  }
+  .tooltip b { color: var(--accent); }
+  .tooltip table { border-collapse: collapse; margin-top: 4px; }
+  .tooltip td { padding: 1px 7px 1px 0; }
+  .tooltip td.k { color: var(--ink-dim); }
+  .tooltip td.v { color: var(--ink); text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .tooltip .alert { color: #ef4444; font-weight: 700; margin-top: 4px; }
+
+  /* ── Selection bar ── */
+  .selbar {
+    position: absolute; top: 10px; right: 10px; z-index: 10;
+    background: rgba(255,255,255,.96);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 11px;
+    font-size: 11px; color: var(--ink-dim);
+    max-width: 240px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  .selbar b { color: var(--accent); }
+  .selbar .row { display: flex; justify-content: space-between; gap: 12px; }
+  .selbar .row span:last-child { color: var(--ink); font-variant-numeric: tabular-nums; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+
+  .loadings { padding: 4px 14px 10px; font-size: 10px; color: var(--ink-dim); }
+  .loadings code { color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+
+  .axis text { fill: var(--ink-dim); font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+  .axis path, .axis line { stroke: var(--grid); }
+  .brush .selection { stroke: var(--accent); fill: var(--accent); fill-opacity: .08; }
+
+  /* ── Loader ── */
+  #loader {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); z-index: 100; flex-direction: column; gap: 14px;
+  }
+  .spinner {
+    width: 34px; height: 34px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #err { color: #ef4444; font-size: 13px; max-width: 560px; text-align: center; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -132,7 +271,7 @@
   const FEAT = D.meta.features, N = D.meta.n;
   const hasTime = !!D.meta.has_time;   // ¿hay fecha_adjudicacion? -> serie temporal o histograma de postores
   const RISK_COL = { 0:"#22c55e", 1:"#eab308", 2:"#f97316", 3:"#ef4444" };
-  const PAL = d3.schemeTableau10;
+  const PAL = ["#ec4899","#06b6d4","#eab308","#22c55e","#7c3aed","#f97316","#10b981","#a855f7","#0ea5e9","#ef4444"];
   const fmtMoney = (v) => {
     if (v >= 1e9) return "S/ " + (v/1e9).toFixed(2) + "MM";
     if (v >= 1e6) return "S/ " + (v/1e6).toFixed(2) + "M";
@@ -308,7 +447,7 @@
     pop.enter().append("rect").attr("class","pop").merge(pop)
       .attr("x",b=>cfg.x(b.x0)+0.5).attr("width",bw)
       .attr("y",(b,i)=>y(cfg.popProp[i])).attr("height",(b,i)=>y(0)-y(cfg.popProp[i]))
-      .attr("fill","#3a4757").attr("opacity",.85);
+      .attr("fill","#c4b5fd").attr("opacity",.7);
     pop.exit().remove();
     const selData=hasSel?cfg.popBins.map((b,i)=>({b,p:selProp[i]||0})):[];
     const sel=cfg.gBody.selectAll("rect.sel").data(selData);
@@ -343,14 +482,14 @@
   function renderBaseD() {
     D2.base=D2.base||document.createElement("canvas"); D2.base.width=D2.W*DPR; D2.base.height=D2.H*DPR;
     const b=D2.base.getContext("2d"); b.setTransform(DPR,0,0,DPR,0,0); b.clearRect(0,0,D2.W,D2.H);
-    b.globalAlpha=.30; b.fillStyle="#5b6b7d";
+    b.globalAlpha=.22; b.fillStyle="#7c3aed";
     for (let i=0;i<N;i++) b.fillRect(D2.tx[i]-0.8,D2.ty[i]-0.8,1.6,1.6); b.globalAlpha=1;
   }
   function drawD() {
     const ctx=D2.ctx; ctx.clearRect(0,0,D2.W,D2.H);
     const hasSel=selected&&selected.size>0;
     ctx.globalAlpha=hasSel?0.33:1; ctx.drawImage(D2.base,0,0,D2.W,D2.H); ctx.globalAlpha=1;
-    if (hasSel){ ctx.fillStyle="#f43f5e"; for (const i of selected) ctx.fillRect(D2.tx[i]-1.7,D2.ty[i]-1.7,3.4,3.4); }
+    if (hasSel){ ctx.fillStyle="#ec4899"; for (const i of selected) ctx.fillRect(D2.tx[i]-1.7,D2.ty[i]-1.7,3.4,3.4); }
   }
 
   // El cuadrante D es serie temporal si hay fecha; si no (p.ej. matriz_modelo),
