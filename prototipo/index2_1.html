@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AIR::MONITOR — Beijing PM2.5 Terminal</title>
+<title>AIR::MONITOR — Beijing PM2.5 Terminal · + scree interactivo (variante)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -29,7 +29,9 @@
   select,button{font-family:var(--mono); font-size:12px; background:#0c1316; color:var(--ink);
     border:1px solid var(--edge); border-radius:0; padding:5px 8px; cursor:pointer;}
   select:hover,button:hover{border-color:var(--green); color:var(--green);}
-  .legend{display:flex; gap:12px;} .legend .lg{display:flex; align-items:center; gap:5px; color:var(--ink-dim); font-size:11px;}
+  .legend{display:flex; gap:10px; flex-wrap:wrap; max-width:380px;} .legend .lg{display:flex; align-items:center; gap:5px; color:var(--ink-dim); font-size:11px;}
+  .minibtn{padding:1px 6px; font-size:9px; letter-spacing:.03em; margin-left:2px;} .minibtn.on{border-color:#9be7ff; color:#9be7ff;}
+  .scatterhead #layoutMode{margin-left:auto;}
   .dot{width:8px; height:8px;}
   .gstat{font-size:11px; color:var(--ink-dim);} .gstat b{color:var(--ink);}
 
@@ -40,8 +42,9 @@
   .cell .ttl b{color:var(--green); font-weight:700; margin-right:6px;}
   .cell .plot{flex:1; position:relative; min-height:0;}
 
+  /* Variante: el área derecha gana una 4ª fila para el panel scree (varianza por PC) */
   .right{background:var(--bg); display:grid; grid-template-columns:minmax(0,1fr) 160px;
-    grid-template-rows:auto minmax(0,1fr) 156px; min-height:0; min-width:0;}
+    grid-template-rows:auto minmax(0,1fr) 150px 96px; min-height:0; min-width:0;}
   .scatterhead{grid-column:1/3; grid-row:1; padding:8px 12px 0; display:flex; align-items:baseline; gap:10px;}
   .scatterhead .h{font-size:12px; letter-spacing:.08em; color:var(--green); font-weight:700;}
   .scatterhead .pcsub{font-size:10.5px; color:var(--ink-dim);}
@@ -61,11 +64,23 @@
     display:flex; flex-direction:column; min-height:0;}
   .loadhead{font-size:10px; color:var(--ink-dim); margin-bottom:2px; letter-spacing:.04em;}
   .loadhead b{color:var(--green);} .loadhead .k1{color:#5bb0ff;} .loadhead .k2{color:var(--sel);}
+  .loadhead #loadSrc{color:var(--ink);}
   .loadcharts{flex:1; display:grid; grid-template-columns:1fr 1fr; gap:10px; min-height:0;}
   .loadcell{display:flex; flex-direction:column; min-width:0; min-height:0;}
   .lcaption{font-size:9.5px; color:var(--ink-dim); margin-bottom:1px;}
   .lplot{flex:1; position:relative; min-height:0;}
   .lplot svg{position:absolute; top:0; left:0;}
+
+  /* Panel scree: varianza explicada por componente + acumulada (NUEVO en esta variante) */
+  .screepanel{grid-column:1/3; grid-row:4; background:var(--panel); border-top:1px dashed var(--edge);
+    display:flex; flex-direction:column; min-height:0; padding:4px 10px 4px;}
+  .screehead{font-size:10px; color:var(--ink-dim); letter-spacing:.04em; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .screehead b{color:var(--green);} .screehead .acc{color:var(--ink);} .screehead .selk{color:var(--sel);}
+  .screehead #screeSub{color:var(--ink-dim);}
+  .modebtn{margin-left:auto; padding:2px 8px; font-size:10px; letter-spacing:.06em;}
+  .modebtn.on{border-color:var(--sel); color:var(--sel);}
+  .screeplot{flex:1; position:relative; min-height:0;}
+  .screeplot svg{position:absolute; top:0; left:0;}
 
   /* Toolbox de variable + estadísticos univariados en B/C */
   .ttl .varsel{padding:2px 6px; font-size:11px; margin-left:2px;}
@@ -101,7 +116,7 @@
     <span class="sub" id="subtitle"></span>
     <span class="sp"></span>
     <span><label>data</label><select id="dataset"><option value="treated" selected>tratado</option><option value="raw">crudo</option></select></span>
-    <span><label>color</label><select id="colorBy"><option value="season" selected>estación</option><option value="period">periodo</option><option value="zona">zona</option></select></span>
+    <span><label>color</label><select id="colorBy"><option value="season" selected>estación</option><option value="period">periodo</option><option value="zona">zona</option><option value="aqi">AQI (calidad)</option></select></span>
     <span class="legend" id="legend"></span>
     <button id="reset">CLR</button>
     <span class="gstat" id="globalStat"></span>
@@ -123,9 +138,9 @@
       </div>
       <div class="cell"><div class="ttl"><b>D</b>serie PM2.5 · 2013→2026</div><div class="plot" id="plotD"><canvas id="canvasD"></canvas><svg id="svgD"></svg></div></div>
     </div>
-    <!-- Scatter a la derecha: A (achicado) + % a su derecha + cargas PC1/PC2 debajo -->
+    <!-- Scatter a la derecha: A + % + cargas PC1/PC2 + scree de varianza (interactivos) -->
     <div class="right">
-      <div class="scatterhead"><span class="h">[A] ESPACIO LATENTE PCA</span><span class="pcsub" id="pcaSub"></span></div>
+      <div class="scatterhead"><span class="h">[A] ESPACIO LATENTE</span><span class="pcsub" id="pcaSub"></span><button id="layoutMode" class="minibtn" title="PCA: ejes interpretables (cargas, % varianza). UMAP: vista de clústeres no lineal — requiere data/aq_umap.js generado por umap_embed.py.">layout: PCA</button></div>
       <div class="scatterbody" id="plotA"><canvas id="canvasA"></canvas><svg id="svgA"></svg>
         <div class="selbar" id="selbar"></div>
       </div>
@@ -135,11 +150,18 @@
         <div class="pctplot"><svg id="svgPct"></svg></div>
       </div>
       <div class="loadings" id="loadings">
-        <div class="loadhead"><b>CARGAS DE LOS EJES (loadings)</b> · influencia de cada variable · <span class="k1">PC1</span> / <span class="k2">PC2</span></div>
+        <div class="loadhead"><b>CARGAS DE LOS EJES (loadings)</b> · <span class="k1">PC1</span> / <span class="k2">PC2</span> · <span style="color:#9be7ff">◆/– – desv. selección</span> · fuente: <span id="loadSrc">global</span></div>
         <div class="loadcharts">
           <div class="loadcell"><div class="lcaption">Lollipop · magnitud y signo (PC1/PC2)</div><div class="lplot"><svg id="svgLoad1"></svg></div></div>
-          <div class="loadcell"><div class="lcaption">Polígono comparativo PC1 vs PC2</div><div class="lplot"><svg id="svgLoad2"></svg></div></div>
+          <div class="loadcell"><div class="lcaption">Polígono · <button id="polyMode" class="minibtn" title="Alterna: PC1/PC2 (ejes principales) ↔ cada variable a lo largo de todos los componentes">ejes principales</button></div><div class="lplot"><svg id="svgLoad2"></svg></div></div>
         </div>
+      </div>
+      <div class="screepanel">
+        <div class="screehead">
+          <b>VARIANZA POR COMPONENTE (scree)</b> · barras=% por PC · <span class="acc">línea=acum.</span> · <span class="selk">– – selección</span> · <span id="screeSub"></span>
+          <button id="pcaMode" class="modebtn" title="GLOBAL: PCA fijo + selección superpuesta · CLÚSTER: re-PCA solo del subconjunto seleccionado">modo: GLOBAL</button>
+        </div>
+        <div class="screeplot"><svg id="svgScree"></svg></div>
       </div>
     </div>
   </main>
@@ -157,6 +179,10 @@
 <script src="vendor/d3.v7.min.js"></script>
 <script src="data/aq_data.js"></script>
 <script src="data/aq_data_raw.js"></script>
-<script src="aq_app.js"></script>
+<!-- Embedding UMAP precalculado (opcional; lo genera umap_embed.py). Si no existe,
+     la variante funciona igual y el botón «layout: UMAP» avisa cómo generarlo. -->
+<script src="data/aq_umap.js"></script>
+<!-- Motor propio de esta variante (copia de aq_app.js + scree/cargas interactivos). -->
+<script src="aq_app_1.js"></script>
 </body>
 </html>

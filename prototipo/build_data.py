@@ -69,6 +69,58 @@ SEASON_LEVELS = ["Invierno", "Primavera", "Verano", "Otono"]
 PERIOD_LEVELS = ["2013-2017", "2022-2026"]
 ZONA_LEVELS = ["Norte", "Centro", "Oeste", "Sur"]
 
+# ───────────────────────── AQI (US EPA) ─────────────────────────
+# Sub-indice lineal por tramos:  AQI = (Ihi-Ilo)/(Chi-Clo)*(C-Clo)+Ilo.
+# Breakpoints en µg/m³ (24 h) para PM2.5 y PM10 — unidades que coinciden con el
+# vector, asi el calculo es exacto sin convertir a ppb/ppm. El AQI final de cada
+# registro = MAX de los subindices disponibles (PM2.5, PM10).  Mismas tablas y
+# bandas que el cliente (aq_app.js), para que ambos coincidan.
+AQI_BP = {
+    "PM2.5": [(0.0, 12.0, 0, 50), (12.1, 35.4, 51, 100), (35.5, 55.4, 101, 150),
+              (55.5, 150.4, 151, 200), (150.5, 250.4, 201, 300), (250.5, 350.4, 301, 400), (350.5, 500.4, 401, 500)],
+    "PM10":  [(0, 54, 0, 50), (55, 154, 51, 100), (155, 254, 101, 150),
+              (255, 354, 151, 200), (355, 424, 201, 300), (425, 504, 301, 400), (505, 604, 401, 500)],
+}
+# (limite_superior_AQI, nombre, color) — segun la tabla del plan.
+AQI_BANDS = [
+    (50,  "Buena",                 "#36e08a"),
+    (100, "Moderada",              "#e6d152"),
+    (150, "Dañina (g. sensibles)", "#ff9f45"),
+    (200, "Dañina",                "#ff5d5d"),
+    (300, "Muy dañina",            "#b07be0"),
+    (500, "Peligrosa",             "#d1495b"),
+]
+
+
+def aqi_sub(conc, table):
+    """Sub-indice AQI de una concentracion en su tramo (None si no es valida)."""
+    if conc is None or not (conc >= 0):
+        return None
+    last_hi = table[-1][1]
+    if conc >= last_hi:
+        return 500
+    for cl, ch, il, ih in table:
+        if conc <= ch:
+            c = max(conc, cl)
+            return int(round((ih - il) / (ch - cl) * (c - cl) + il))
+    return 500
+
+
+def aqi_value(pm25, pm10=None):
+    """AQI = maximo de los subindices disponibles (PM2.5, PM10)."""
+    subs = [aqi_sub(pm25, AQI_BP["PM2.5"])]
+    if pm10 is not None:
+        subs.append(aqi_sub(pm10, AQI_BP["PM10"]))
+    subs = [s for s in subs if s is not None]
+    return max(subs) if subs else 0
+
+
+def aqi_cat_idx(aqi):
+    for k, (hi, _n, _c) in enumerate(AQI_BANDS):
+        if aqi <= hi:
+            return k
+    return len(AQI_BANDS) - 1
+
 
 def log(msg=""):
     print(msg, flush=True)
@@ -254,6 +306,15 @@ def serialize(df: pd.DataFrame, var_name: str, out_path: Path, label: str, note:
     feat_min = scaler.data_min_.tolist()
     feat_max = scaler.data_max_.tolist()
 
+    # AQI por registro (desde los valores originales PM2.5/PM10, antes de Min-Max).
+    pm25 = df["PM2.5"].to_numpy()
+    pm10 = df["PM10"].to_numpy() if "PM10" in df.columns else None
+    aqi_arr, aqi_cat_arr = [], []
+    for k in range(len(df)):
+        v = aqi_value(float(pm25[k]), float(pm10[k]) if pm10 is not None else None)
+        aqi_arr.append(int(v))
+        aqi_cat_arr.append(aqi_cat_idx(v))
+
     wd_levels = sorted(df["wd"].astype(str).unique().tolist())
     season_idx = df["season"].map({s: i for i, s in enumerate(SEASON_LEVELS)}).fillna(0).astype(int)
     period_idx = df["period"].map({p: i for i, p in enumerate(PERIOD_LEVELS)}).astype(int)
@@ -275,8 +336,11 @@ def serialize(df: pd.DataFrame, var_name: str, out_path: Path, label: str, note:
             "zonas": ZONA_LEVELS,
             "wd": wd_levels,
             "n": int(len(df)),
+            "aqi_bands": [{"hi": hi, "name": n, "color": c} for hi, n, c in AQI_BANDS],
         },
         "t": t_ms.tolist(),
+        "aqi": aqi_arr,
+        "aqi_cat": aqi_cat_arr,
         "station": station_idx.tolist(),
         "zona": zona_idx.tolist(),
         "season": season_idx.tolist(),
