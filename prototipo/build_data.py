@@ -31,6 +31,7 @@ Ejecutar:  python build_data.py
 
 import json
 import sys
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -42,8 +43,13 @@ HERE      = Path(__file__).resolve().parent
 ROOT      = HERE.parent
 BASE_HIST = ROOT / "datasets" / "2013-2017" / "PRSA_Data_20130301-20170228"
 BASE_CURR = ROOT / "datasets" / "2022-2026" / "air_quality_historical.csv"
-OUT_TREAT = HERE / "data" / "aq_data.js"
-OUT_RAW   = HERE / "data" / "aq_data_raw.js"
+OUT_TREAT      = HERE / "data" / "aq_data.js"
+OUT_RAW        = HERE / "data" / "aq_data_raw.js"
+METEO_CACHE    = HERE / "data" / "meteo_real_beijing.csv"
+
+# Coordenadas de Beijing para la API de Open-Meteo
+BEIJING_LAT = 39.9042
+BEIJING_LON = 116.4074
 
 # ───────────────────────── Constantes ─────────────────────────
 ZONA_MAP = {
@@ -124,6 +130,87 @@ def aqi_cat_idx(aqi):
 
 def log(msg=""):
     print(msg, flush=True)
+
+
+# ───────────────────────── Meteorología real (Open-Meteo Archive) ─────────────
+_COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+            "S","SSW","SW","WSW","W","WNW","NW","NNW"]
+
+def _deg_to_cardinal(deg):
+    """Convierte grados a dirección cardinal de 16 puntos."""
+    if pd.isna(deg):
+        return "unknown"
+    return _COMPASS[int((float(deg) + 11.25) / 22.5) % 16]
+
+
+def fetch_meteo_openmeteo(start_date: str, end_date: str) -> pd.DataFrame | None:
+    """
+    Descarga meteorologia real horaria de Open-Meteo Historical Weather API para
+    Beijing y la agrega a diario. Guarda cache local en data/meteo_real_beijing.csv.
+
+    Variables: TEMP (temperature_2m), PRES (surface_pressure), DEW (dewpoint_2m),
+               WSPM (windspeed_10m en m/s), wd (winddirection_10m -> cardinal).
+
+    Retorna DataFrame con columnas [date, TEMP, PRES, DEW, WSPM, wd]
+    o None si la descarga falla.
+    """
+    # Leer cache si ya existe y cubre el rango pedido
+    if METEO_CACHE.exists():
+        cached = pd.read_csv(METEO_CACHE, parse_dates=["date"])
+        if (str(cached["date"].min().date()) <= start_date and
+                str(cached["date"].max().date()) >= end_date):
+            log(f"  Meteo real: usando cache ({METEO_CACHE.name})")
+            return cached
+
+    url = (
+        f"https://archive-api.open-meteo.com/v1/archive"
+        f"?latitude={BEIJING_LAT}&longitude={BEIJING_LON}"
+        f"&start_date={start_date}&end_date={end_date}"
+        f"&hourly=temperature_2m,surface_pressure,dewpoint_2m,"
+        f"windspeed_10m,winddirection_10m"
+        f"&wind_speed_unit=ms"
+        f"&timezone=Asia%2FShanghai"
+    )
+    log(f"  Descargando meteo real Open-Meteo ({start_date} -> {end_date})...")
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        log(f"  ADVERTENCIA: fallo al descargar meteo real ({e}). Se usara climatologia.")
+        return None
+
+    h = data.get("hourly", {})
+    if not h or "time" not in h:
+        log("  ADVERTENCIA: respuesta vacia de Open-Meteo. Se usara climatologia.")
+        return None
+
+    df = pd.DataFrame({
+        "datetime": pd.to_datetime(h["time"]),
+        "TEMP":     pd.to_numeric(h.get("temperature_2m"),    errors="coerce"),
+        "PRES":     pd.to_numeric(h.get("surface_pressure"),   errors="coerce"),
+        "DEW":      pd.to_numeric(h.get("dewpoint_2m"),        errors="coerce"),
+        "WSPM":     pd.to_numeric(h.get("windspeed_10m"),      errors="coerce"),
+        "wd_deg":   pd.to_numeric(h.get("winddirection_10m"),  errors="coerce"),
+    })
+    df["wd"] = df["wd_deg"].apply(_deg_to_cardinal)
+    df["date"] = df["datetime"].dt.normalize()
+
+    def wd_mode(x):
+        m = x.mode()
+        return m.iloc[0] if len(m) else "unknown"
+
+    daily = df.groupby("date").agg(
+        TEMP=("TEMP", "mean"),
+        PRES=("PRES", "mean"),
+        DEW=("DEW",  "mean"),
+        WSPM=("WSPM", "mean"),
+        wd=("wd", wd_mode),
+    ).reset_index()
+
+    METEO_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    daily.to_csv(METEO_CACHE, index=False)
+    log(f"  Meteo real guardada: {len(daily):,} dias -> {METEO_CACHE.name}")
+    return daily
 
 
 # ───────────────────────── ETL historico ─────────────────────────
@@ -209,9 +296,16 @@ def build_climatology(daily_hist: pd.DataFrame):
     return clim
 
 
-def project_current(df_curr: pd.DataFrame, daily_hist: pd.DataFrame) -> pd.DataFrame:
-    """Redistribuye Beijing en 12 estaciones virtuales (ratios) + proyecta meteo."""
-    clim = build_climatology(daily_hist)
+def project_current(df_curr: pd.DataFrame, daily_hist: pd.DataFrame,
+                    real_meteo: pd.DataFrame | None = None) -> pd.DataFrame:
+    """
+    Redistribuye Beijing en 12 estaciones virtuales (ratios de contaminantes).
+    Meteorologia: usa real_meteo si se provee (Open-Meteo Archive); de lo
+    contrario cae en la climatologia historica por estacion x mes.
+    Las 12 estaciones virtuales comparten la misma meteorologia de Beijing
+    (no hay diferencia espacial en el periodo actual).
+    """
+    clim = build_climatology(daily_hist)  # fallback siempre disponible
     global_means = {p: daily_hist[p].mean() for p in POLLUTANTS}
     ratios = {}
     for st in STATIONS:
@@ -220,18 +314,44 @@ def project_current(df_curr: pd.DataFrame, daily_hist: pd.DataFrame) -> pd.DataF
             p: (sub[p].mean() / global_means[p]) if global_means[p] else 1.0
             for p in POLLUTANTS
         }
+
+    # Indexar meteo real por fecha para lookup O(1)
+    if real_meteo is not None:
+        meteo_idx = real_meteo.set_index("date")
+    else:
+        meteo_idx = None
+
     rows = []
     months = df_curr["date"].dt.month.values
+    dates  = pd.to_datetime(df_curr["date"].values)
+
     for st in STATIONS:
         tmp = df_curr.copy()
         for p in POLLUTANTS:
             if p in tmp.columns:
                 tmp[p] = (tmp[p] * ratios[st][p]).clip(lower=0)
         tmp["station"] = st
+
         for met in METEO:
-            tmp[met] = [clim[st][m][met] for m in months]
-        tmp["wd"] = [clim[st][m]["wd"] for m in months]
+            vals = []
+            for d, m in zip(dates, months):
+                if meteo_idx is not None and d in meteo_idx.index:
+                    v = meteo_idx.at[d, met]
+                    vals.append(v if not pd.isna(v) else clim[st][m][met])
+                else:
+                    vals.append(clim[st][m][met])
+            tmp[met] = vals
+
+        wd_vals = []
+        for d, m in zip(dates, months):
+            if meteo_idx is not None and d in meteo_idx.index:
+                wd_vals.append(meteo_idx.at[d, "wd"])
+            else:
+                wd_vals.append(clim[st][m]["wd"])
+        tmp["wd"] = wd_vals
+
         rows.append(tmp)
+
     out = pd.concat(rows, ignore_index=True)
     out["period"] = "2022-2026"
     return out
@@ -259,12 +379,19 @@ def finalize_meta(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ───────────────────────── Preparacion por modo ─────────────────────────
-def prepare_treated() -> pd.DataFrame:
-    log("\n[TRATADO] ETL + agregacion + estaciones virtuales + proyeccion...")
+def prepare_treated() -> tuple[pd.DataFrame, str]:
+    log("\n[TRATADO] ETL + agregacion + estaciones virtuales...")
     hourly = load_historical(BASE_HIST, clean_negatives=True)
     daily_hist = aggregate_daily(hourly, impute=True)
     curr = load_current(BASE_CURR)
-    daily_curr = project_current(curr, daily_hist)
+
+    start = curr["date"].min().strftime("%Y-%m-%d")
+    end   = curr["date"].max().strftime("%Y-%m-%d")
+    real_meteo = fetch_meteo_openmeteo(start, end)
+    meteo_src = "Open-Meteo Archive (medida)" if real_meteo is not None else "climatologia historica (proyectada)"
+    log(f"  Meteorologia 2022-2026: {meteo_src}")
+
+    daily_curr = project_current(curr, daily_hist, real_meteo=real_meteo)
 
     daily_hist = daily_hist.rename(columns={"date": "datetime"})
     daily_curr = daily_curr.rename(columns={"date": "datetime"})
@@ -281,7 +408,7 @@ def prepare_treated() -> pd.DataFrame:
     for col in FEATURES:  # IQR protegiendo smog
         df[col] = iqr_clip(df[col], protect_high=(col == "PM2.5"))
     log(f"  Registros: {len(df):,}  | PM2.5>150 conservados: {crit_before:,}")
-    return df
+    return df, meteo_src
 
 
 def prepare_raw() -> pd.DataFrame:
@@ -366,12 +493,12 @@ def main():
     log("  MOTOR DE DATOS — Beijing Air Latent Space (TRATADO + CRUDO)")
     log("=" * 64)
 
-    df_treat = prepare_treated()
+    df_treat, meteo_src = prepare_treated()
     serialize(
         df_treat, "AQ_DATA", OUT_TREAT,
         label="Tratado",
-        note="2013-2026 · imputado · IQR (smog>150 conservado) · meteo del periodo "
-             "actual proyectada por climatologia · Min-Max",
+        note=f"2013-2026 · imputado · IQR (smog>150 conservado) · meteo 2022-2026: "
+             f"{meteo_src} · Min-Max",
     )
 
     df_raw = prepare_raw()
