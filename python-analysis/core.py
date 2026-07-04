@@ -21,8 +21,10 @@ from typing import Optional
 # ══════════════════════════════════════════════════════════════════
 
 # Features disponibles según el dataset histórico UCI
+# WDIR_sin/cos: codificación sine/cosine de la dirección del viento (circular)
+# Avalado por Li et al. 2022 (doi:10.3390/atmos13101719) — mismo dataset UCI PRSA
 FEATURES_UCI = ["PM2.5", "PM10", "SO2", "NO2", "CO", "O3",
-                 "TEMP", "PRES", "DEW", "WSPM"]
+                 "TEMP", "PRES", "DEW", "WSPM", "WDIR_sin", "WDIR_cos"]
 
 # Features del dataset actual (solo PM2.5 garantizado)
 FEATURES_CURR = ["PM2.5"]
@@ -568,6 +570,119 @@ JSON (array de 4 objetos):
     text = "".join(b.get("text", "") for b in resp.json().get("content", []))
     clean = text.strip().removeprefix("```json").removesuffix("```").strip()
     return json.loads(clean)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  CLUSTERING K-MEANS + MARKOV + VALIDACIÓN DE HIPÓTESIS
+# ══════════════════════════════════════════════════════════════════
+
+def kmeans_clustering(X: np.ndarray, k: int = 3, random_state: int = 42) -> dict:
+    """
+    K-Means sobre la matriz normalizada (n_obs × n_features).
+    k=3 por defecto: modo Limpio / Transición / Crisis.
+
+    Retorna dict con:
+      labels       : np.ndarray (n_obs,) con asignación de cluster 0/1/2
+      centroids    : np.ndarray (k, n_features) — centros en espacio original
+      silhouette   : float — puntuación de cohesión (−1 a 1, más alto = mejor)
+      inertia      : float — suma de distancias al cuadrado al centroide
+      k            : int
+    """
+    try:
+        from sklearn.cluster import KMeans
+        from sklearn.metrics import silhouette_score
+    except ImportError:
+        raise ImportError("sklearn requerido: pip install scikit-learn --break-system-packages")
+
+    km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+    labels = km.fit_predict(X)
+    sil = float(silhouette_score(X, labels)) if len(set(labels)) > 1 else 0.0
+    return {
+        "labels":     labels,
+        "centroids":  km.cluster_centers_,
+        "silhouette": round(sil, 4),
+        "inertia":    round(float(km.inertia_), 2),
+        "k":          k,
+    }
+
+
+def elbow_method(X: np.ndarray, k_range: range = range(2, 8)) -> dict:
+    """Inercia para cada k. Usado para elegir el número óptimo de clusters."""
+    try:
+        from sklearn.cluster import KMeans
+    except ImportError:
+        raise ImportError("sklearn requerido.")
+    return {
+        k: round(float(KMeans(n_clusters=k, n_init=10, random_state=42).fit(X).inertia_), 2)
+        for k in k_range
+    }
+
+
+def markov_matrix(labels: np.ndarray) -> np.ndarray:
+    """
+    Matriz de transición de Markov k×k normalizada por fila.
+    Entrada: serie temporal de etiquetas de cluster (0, 1, 2, ...).
+    Retorna: np.ndarray (k, k) con probabilidades de transición.
+    La diagonal alta indica inercia del modo (cluster persiste día a día).
+    """
+    k = int(labels.max()) + 1
+    M = np.zeros((k, k), dtype=np.float64)
+    for t in range(len(labels) - 1):
+        M[labels[t], labels[t + 1]] += 1.0
+    row_sums = M.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    return M / row_sums
+
+
+def validar_hipotesis(df) -> dict:
+    """
+    Validación numérica de las hipótesis principales del proyecto.
+
+    H1: DEW correlaciona negativamente con PM2.5
+        (DEW bajo → aire seco invernal → smog acumulado)
+    H5: WSPM correlaciona negativamente con PM2.5
+        (viento dispersa contaminación)
+
+    Retorna dict con r de Pearson, p-value y clasificación cualitativa.
+    """
+    try:
+        from scipy.stats import pearsonr, spearmanr
+    except ImportError:
+        raise ImportError("scipy requerido: pip install scipy --break-system-packages")
+
+    resultado = {}
+    pares = [
+        ("H1", "DEW",  "PM2.5", "DEW bajo → smog acumulado (inversión térmica)"),
+        ("H5", "WSPM", "PM2.5", "Viento dispersa contaminación"),
+    ]
+    for hid, var_x, var_y, descripcion in pares:
+        if var_x not in df.columns or var_y not in df.columns:
+            resultado[hid] = {"error": f"{var_x} o {var_y} no disponible"}
+            continue
+        sub = df[[var_x, var_y]].dropna()
+        if len(sub) < 30:
+            resultado[hid] = {"error": "Insuficientes datos"}
+            continue
+        r_p, p_p = pearsonr(sub[var_x].values, sub[var_y].values)
+        r_s, p_s = spearmanr(sub[var_x].values, sub[var_y].values)
+        fuerza = (
+            "Fuerte"   if abs(r_p) > 0.5 else
+            "Moderada" if abs(r_p) > 0.3 else
+            "Débil"
+        )
+        direccion = "negativa" if r_p < 0 else "positiva"
+        resultado[hid] = {
+            "hipotesis":    descripcion,
+            "var_x":        var_x,
+            "r_pearson":    round(float(r_p), 4),
+            "p_pearson":    round(float(p_p), 6),
+            "r_spearman":   round(float(r_s), 4),
+            "p_spearman":   round(float(p_s), 6),
+            "n":            len(sub),
+            "clasificacion":f"{fuerza} {direccion}",
+            "significativo": p_p < 0.001,
+        }
+    return resultado
 
 
 # ══════════════════════════════════════════════════════════════════

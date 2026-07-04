@@ -394,6 +394,109 @@
 
   function updateAux() { renderScree(); renderLoadings(); }
 
+
+  // ── Heatmap de correlación Pearson 10×10 ──
+  function drawCorr() {
+    const host = document.getElementById("svgCorr"); if (!host) return;
+    const par = host.parentNode, W = par.clientWidth, H = par.clientHeight;
+    const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
+    if (W < 40 || H < 30) return;
+    const p = FEAT.length;
+    const means = new Float64Array(p);
+    for (let j = 0; j < p; j++) { let s = 0; const col = D.X[j]; for (let i = 0; i < N; i++) s += col[i]; means[j] = s / N; }
+    const R = Array.from({ length: p }, () => new Float64Array(p));
+    for (let j = 0; j < p; j++) {
+      R[j][j] = 1;
+      for (let k = j + 1; k < p; k++) {
+        let sxy = 0, sx2 = 0, sy2 = 0;
+        const cj = D.X[j], ck = D.X[k], mj = means[j], mk = means[k];
+        for (let i = 0; i < N; i++) { const dj = cj[i] - mj, dk = ck[i] - mk; sxy += dj * dk; sx2 += dj * dj; sy2 += dk * dk; }
+        const r = sxy / Math.sqrt(sx2 * sy2 || 1);
+        R[j][k] = r; R[k][j] = r;
+      }
+    }
+    const cScale = d3.scaleLinear().domain([-1, 0, 1]).range(["#3b82f6", "#0e1a14", "#f43f5e"]);
+    const m = { t: 10, r: 10, b: 52, l: 48 };
+    const usableW = W - m.l - m.r, usableH = H - m.t - m.b;
+    const cell = Math.min(usableW / p, usableH / p);
+    const gx = m.l + (usableW - cell * p) / 2, gy = m.t;
+    for (let j = 0; j < p; j++) for (let k = 0; k < p; k++) {
+      svg.append("rect").attr("x", gx + k * cell).attr("y", gy + j * cell)
+        .attr("width", cell - 1).attr("height", cell - 1).attr("fill", cScale(R[j][k]));
+      if (cell >= 24) svg.append("text")
+        .attr("x", gx + k * cell + cell / 2).attr("y", gy + j * cell + cell / 2 + 3.5)
+        .attr("text-anchor", "middle").attr("fill", Math.abs(R[j][k]) > 0.45 ? "#fff" : "var(--ink)")
+        .attr("font-size", Math.min(cell * 0.26, 9)).text(R[j][k].toFixed(2));
+    }
+    FEAT.forEach((f, j) => svg.append("text").attr("x", gx - 4).attr("y", gy + j * cell + cell / 2 + 3.5)
+      .attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", Math.min(cell * 0.4, 9.5)).text(fshort(f)));
+    FEAT.forEach((f, k) => svg.append("text")
+      .attr("transform", "translate(" + (gx + k * cell + cell / 2) + "," + (gy + p * cell + 6) + ") rotate(40)")
+      .attr("text-anchor", "start").attr("fill", "var(--ink-dim)").attr("font-size", Math.min(cell * 0.4, 9.5)).text(fshort(f)));
+    const bx = gx, by = H - 11, bw = cell * p, bh = 5;
+    const defs = svg.append("defs");
+    const grad = defs.append("linearGradient").attr("id", "corrGrad");
+    grad.append("stop").attr("offset", "0%").attr("stop-color", "#3b82f6");
+    grad.append("stop").attr("offset", "50%").attr("stop-color", "#0e1a14");
+    grad.append("stop").attr("offset", "100%").attr("stop-color", "#f43f5e");
+    svg.append("rect").attr("x", bx).attr("y", by).attr("width", bw).attr("height", bh).attr("fill", "url(#corrGrad)");
+    svg.append("text").attr("x", bx).attr("y", by - 2).attr("fill", "var(--ink-dim)").attr("font-size", 7).text("-1");
+    svg.append("text").attr("x", bx + bw / 2).attr("y", by - 2).attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 7).text("r Pearson");
+    svg.append("text").attr("x", bx + bw).attr("y", by - 2).attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", 7).text("+1");
+  }
+
+  // ── Coordenadas Paralelas (PCP) enlazadas al brushing ──
+  function drawPCP() {
+    const host = document.getElementById("svgPCP"); if (!host) return;
+    const par = host.parentNode, W = par.clientWidth, H = par.clientHeight;
+    const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
+    if (W < 40 || H < 20) return;
+    const p = FEAT.length;
+    const m = { t: 20, r: 10, b: 18, l: 6 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const xScale = d3.scalePoint().domain(FEAT).range([m.l, m.l + iw]).padding(0.08);
+    const yScale = d3.scaleLinear().domain([0, 1]).range([m.t + ih, m.t]);
+    FEAT.forEach(f => {
+      const x = xScale(f);
+      svg.append("line").attr("x1", x).attr("x2", x).attr("y1", m.t).attr("y2", m.t + ih).attr("stroke", "var(--edge)").attr("stroke-width", 1);
+      svg.append("text").attr("x", x).attr("y", m.t - 4).attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 7.5).text(fshort(f));
+    });
+    const hasSel = selected && selected.size > 0;
+    let indices;
+    if (hasSel) {
+      indices = [...selected];
+    } else {
+      const step = Math.max(1, Math.ceil(N / 800));
+      indices = []; for (let i = 0; i < N; i += step) indices.push(i);
+    }
+    const lineGen = d3.line();
+    const gLines = svg.append("g").attr("opacity", hasSel ? 0.75 : 0.18);
+    const maxLines = hasSel ? Math.min(indices.length, 1500) : indices.length;
+    for (let li = 0; li < maxLines; li++) {
+      const i = indices[li];
+      const pts = FEAT.map((f, j) => [xScale(f), yScale(D.X[j][i])]);
+      gLines.append("path").attr("d", lineGen(pts)).attr("fill", "none").attr("stroke", colorOf(i)).attr("stroke-width", hasSel ? 1.0 : 0.5);
+    }
+    const sub = document.getElementById("pcpSub");
+    if (sub) sub.textContent = hasSel
+      ? (selected.size.toLocaleString("es") + " registros sel. · cada linea = 1 dia")
+      : ("muestra " + maxLines.toLocaleString("es") + " de " + N.toLocaleString("es") + " · arrastra en [A] para filtrar");
+  }
+
+  // ── Control de pestanas del panel inferior ──
+  let bottomMode = "load";
+  function drawBottom() { if (bottomMode === "corr") drawCorr(); else if (bottomMode === "pcp") drawPCP(); }
+  function switchBottom(mode) {
+    bottomMode = mode;
+    document.querySelectorAll(".btab").forEach(b => b.classList.toggle("active", b.dataset.tab === mode));
+    const tl = document.getElementById("tab-load"); if (tl) tl.style.display = mode === "load" ? "grid" : "none";
+    const tc = document.getElementById("tab-corr"); if (tc) tc.style.display = mode === "corr" ? "block" : "none";
+    const tp = document.getElementById("tab-pcp"); if (tp) tp.style.display = mode === "pcp" ? "flex" : "none";
+    const right = document.querySelector(".right");
+    if (right) right.classList.toggle("bottom-expanded", mode !== "load");
+    drawBottom();
+  }
+
   function renderBaseA() {
     A.base = A.base || document.createElement("canvas"); A.base.width = A.W * DPR; A.base.height = A.H * DPR;
     const b = A.base.getContext("2d"); b.setTransform(DPR, 0, 0, DPR, 0, 0); b.clearRect(0, 0, A.W, A.H);
@@ -419,7 +522,7 @@
     selected = s; scheduleRedraw();
   }
   let raf = null;
-  function scheduleRedraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = null; drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); }); }
+  function scheduleRedraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = null; drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); drawBottom(); }); }
   function clearSelection() { selected = null; if (A.brushG) A.brushG.call(A.brush.move, null); scheduleRedraw(); updateAux(); }
 
   // ── % composición por variable ──
@@ -641,8 +744,8 @@
   const B = { plot: "plotB", svg_id: "svgB", sel_id: "selB", stat_id: "statB", feat: 0, label: "PM2.5 (µg/m³)" };
   const C = { plot: "plotC", svg_id: "svgC", sel_id: "selC", stat_id: "statC", feat: 0, label: "DEWP — punto de rocío (°C)" };
 
-  function buildAll() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); updateAux(); }
-  function rebuild() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); if (A.brushG) A.brushG.call(A.brush); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); updateAux(); }
+  function buildAll() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); updateAux(); drawBottom(); }
+  function rebuild() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); if (A.brushG) A.brushG.call(A.brush); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); updateAux(); drawBottom(); }
 
   function loadDataset(key) {
     const next = DATASETS[key]; if (!next || !next.X) { console.warn("Dataset no disponible:", key); return; }
@@ -699,6 +802,9 @@
   });
   let rt = null; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(rebuild, 180); });
 
-  loadDataset("treated");
+  // Pestanas del panel inferior
+  document.querySelectorAll(".btab").forEach(btn => btn.addEventListener("click", () => switchBottom(btn.dataset.tab)));
+
+    loadDataset("treated");
   const ld = document.getElementById("loader"); if (ld) ld.style.display = "none";
 })();

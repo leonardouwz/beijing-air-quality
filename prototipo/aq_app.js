@@ -134,6 +134,14 @@
   }
 
   let selected = null, colorMode = "season";
+  let projMode = "pca";              // "pca" | "umap"
+  let umapU1 = null, umapU2 = null;  // coords precomputadas (aq_umap.js)
+  let bottomMode = "load";           // "load" | "corr" | "pcp"
+  function initUMAP() {
+    if (!window.AQ_UMAP || !window.AQ_UMAP.treated) return;
+    umapU1 = window.AQ_UMAP.treated.u1;
+    umapU2 = window.AQ_UMAP.treated.u2;
+  }
   const colorOf = (i) => colorMode === "season" ? SEASON_COL[D.season[i]]
     : colorMode === "period" ? PERIOD_COL[D.period[i]] : ZONA_COL[D.zona[i]];
 
@@ -158,24 +166,39 @@
     const plot = document.getElementById("plotA"); A.W = plot.clientWidth; A.H = plot.clientHeight;
     A.iw = A.W - A.m.l - A.m.r; A.ih = A.H - A.m.t - A.m.b;
     A.ctx = sizeCanvas(document.getElementById("canvasA"), A.W, A.H);
-    A.x = d3.scaleLinear().domain(d3.extent(pc1)).nice().range([A.m.l, A.m.l + A.iw]);
-    A.y = d3.scaleLinear().domain(d3.extent(pc2)).nice().range([A.m.t + A.ih, A.m.t]);
+    const isUMAP = projMode === "umap" && umapU1 && umapU1.length === N && D === DATASETS.treated;
+    const u1 = isUMAP ? umapU1 : pc1, u2 = isUMAP ? umapU2 : pc2;
+    A.x = d3.scaleLinear().domain(d3.extent(u1)).nice().range([A.m.l, A.m.l + A.iw]);
+    A.y = d3.scaleLinear().domain(d3.extent(u2)).nice().range([A.m.t + A.ih, A.m.t]);
     A.px = new Float64Array(N); A.py = new Float64Array(N);
-    for (let i = 0; i < N; i++) { A.px[i] = A.x(pc1[i]); A.py[i] = A.y(pc2[i]); }
+    for (let i = 0; i < N; i++) { A.px[i] = A.x(u1[i]); A.py[i] = A.y(u2[i]); }
     A.quad = d3.quadtree().x(i => A.px[i]).y(i => A.py[i]).addAll(d3.range(N));
     renderBaseA();
     const svg = d3.select("#svgA").attr("width", A.W).attr("height", A.H); svg.selectAll("*").remove();
     svg.append("g").attr("class", "axis").attr("transform", `translate(0,${A.m.t + A.ih})`).call(d3.axisBottom(A.x).ticks(6));
     svg.append("g").attr("class", "axis").attr("transform", `translate(${A.m.l},0)`).call(d3.axisLeft(A.y).ticks(6));
-    svg.append("text").attr("x", A.m.l + A.iw / 2).attr("y", A.H - 4).attr("text-anchor", "middle")
-      .attr("fill", "var(--ink-dim)").attr("font-size", 11).text(`PC1 (${(pcs[0].ratio * 100).toFixed(1)}% var.)`);
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(A.m.t + A.ih / 2)).attr("y", 14)
-      .attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 11).text(`PC2 (${(pcs[1].ratio * 100).toFixed(1)}% var.)`);
+    if (isUMAP) {
+      svg.append("text").attr("x", A.m.l + A.iw / 2).attr("y", A.H - 4).attr("text-anchor", "middle")
+        .attr("fill", "var(--ink-dim)").attr("font-size", 11).text("UMAP dim 1");
+      svg.append("text").attr("transform", "rotate(-90)").attr("x", -(A.m.t + A.ih / 2)).attr("y", 14)
+        .attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 11).text("UMAP dim 2");
+    } else {
+      svg.append("text").attr("x", A.m.l + A.iw / 2).attr("y", A.H - 4).attr("text-anchor", "middle")
+        .attr("fill", "var(--ink-dim)").attr("font-size", 11).text(`PC1 (${(pcs[0].ratio * 100).toFixed(1)}% var.)`);
+      svg.append("text").attr("transform", "rotate(-90)").attr("x", -(A.m.t + A.ih / 2)).attr("y", 14)
+        .attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 11).text(`PC2 (${(pcs[1].ratio * 100).toFixed(1)}% var.)`);
+    }
     A.brush = d3.brush().extent([[A.m.l, A.m.t], [A.m.l + A.iw, A.m.t + A.ih]]).on("brush", brushed).on("end", brushEnded);
     A.brushG = svg.append("g").attr("class", "brush").call(A.brush);
     A.brushG.select(".overlay").on("mousemove.tip", hoverMove).on("mouseleave.tip", hideTip);
     const ps = document.getElementById("pcaSub");
-    if (ps) ps.textContent = `PC1 × PC2 · ${N.toLocaleString("es")} registros · var. acumulada ${((pcs[0].ratio + pcs[1].ratio) * 100).toFixed(1)}%`;
+    if (isUMAP) {
+      if (ps) ps.textContent = `n_neighbors=30 · min_dist=0.1 · métrica euclídea · ${N.toLocaleString("es")} registros`;
+    } else {
+      if (ps) ps.textContent = `PC1 × PC2 · ${N.toLocaleString("es")} registros · var. acumulada ${((pcs[0].ratio + pcs[1].ratio) * 100).toFixed(1)}%`;
+    }
+    const lbl = document.getElementById("scatterLabel");
+    if (lbl) lbl.textContent = isUMAP ? "[A] ESPACIO LATENTE UMAP" : "[A] ESPACIO LATENTE PCA";
     renderLoadings();
   }
   // Gráficos de cargas (loadings) de PC1 y PC2 — reemplazan al texto anterior.
@@ -232,6 +255,131 @@
         FEAT.forEach((f, j) => svg.append("circle").attr("cx", x(f)).attr("cy", y(vec[j])).attr("r", 2).attr("fill", col));
       });
     })();
+  }
+
+  // ── Heatmap de correlación Pearson 10×10 ──
+  function drawCorr() {
+    const host = document.getElementById("svgCorr"); if (!host) return;
+    const par = host.parentNode, W = par.clientWidth, H = par.clientHeight;
+    const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
+    if (W < 40 || H < 40) return;
+    const p = FEAT.length;
+    // Calcular medias
+    const means = new Float64Array(p);
+    for (let j = 0; j < p; j++) { let s = 0; const col = D.X[j]; for (let i = 0; i < N; i++) s += col[i]; means[j] = s / N; }
+    // Calcular matriz Pearson r[j][k]
+    const R = Array.from({ length: p }, () => new Float64Array(p));
+    for (let j = 0; j < p; j++) {
+      R[j][j] = 1;
+      for (let k = j + 1; k < p; k++) {
+        let sxy = 0, sx2 = 0, sy2 = 0;
+        const cj = D.X[j], ck = D.X[k], mj = means[j], mk = means[k];
+        for (let i = 0; i < N; i++) { const dj = cj[i] - mj, dk = ck[i] - mk; sxy += dj * dk; sx2 += dj * dj; sy2 += dk * dk; }
+        const r = sxy / Math.sqrt(sx2 * sy2 || 1);
+        R[j][k] = r; R[k][j] = r;
+      }
+    }
+    // Escala de color divergente: azul=-1 / negro=0 / rojo=+1
+    const cScale = d3.scaleLinear().domain([-1, 0, 1]).range(["#3b82f6", "#0e1a14", "#f43f5e"]);
+    const m = { t: 12, r: 12, b: 56, l: 52 };
+    const usableW = W - m.l - m.r, usableH = H - m.t - m.b;
+    const cell = Math.min(usableW / p, usableH / p);
+    const gx = m.l + (usableW - cell * p) / 2, gy = m.t;
+    // Celdas
+    for (let j = 0; j < p; j++) for (let k = 0; k < p; k++) {
+      svg.append("rect")
+        .attr("x", gx + k * cell).attr("y", gy + j * cell)
+        .attr("width", cell - 1).attr("height", cell - 1)
+        .attr("fill", cScale(R[j][k]));
+      if (cell >= 26) {
+        svg.append("text")
+          .attr("x", gx + k * cell + cell / 2).attr("y", gy + j * cell + cell / 2 + 3.5)
+          .attr("text-anchor", "middle").attr("fill", Math.abs(R[j][k]) > 0.45 ? "#fff" : "var(--ink)")
+          .attr("font-size", Math.min(cell * 0.26, 9)).text(R[j][k].toFixed(2));
+      }
+    }
+    // Etiquetas fila (izquierda)
+    FEAT.forEach((f, j) => svg.append("text").attr("x", gx - 4).attr("y", gy + j * cell + cell / 2 + 3.5)
+      .attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", Math.min(cell * 0.4, 9.5)).text(fshort(f)));
+    // Etiquetas columna (inferior, rotadas)
+    FEAT.forEach((f, k) => svg.append("text")
+      .attr("transform", `translate(${gx + k * cell + cell / 2},${gy + p * cell + 6}) rotate(40)`)
+      .attr("text-anchor", "start").attr("fill", "var(--ink-dim)").attr("font-size", Math.min(cell * 0.4, 9.5)).text(fshort(f)));
+    // Barra de color (leyenda)
+    const bx = gx, by = H - 12, bw = cell * p, bh = 6;
+    const defs = svg.append("defs");
+    const grad = defs.append("linearGradient").attr("id", "corrGrad");
+    grad.append("stop").attr("offset", "0%").attr("stop-color", "#3b82f6");
+    grad.append("stop").attr("offset", "50%").attr("stop-color", "#0e1a14");
+    grad.append("stop").attr("offset", "100%").attr("stop-color", "#f43f5e");
+    svg.append("rect").attr("x", bx).attr("y", by).attr("width", bw).attr("height", bh).attr("fill", "url(#corrGrad)");
+    svg.append("text").attr("x", bx).attr("y", by - 2).attr("fill", "var(--ink-dim)").attr("font-size", 7).text("−1");
+    svg.append("text").attr("x", bx + bw / 2).attr("y", by - 2).attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 7).text("r de Pearson");
+    svg.append("text").attr("x", bx + bw).attr("y", by - 2).attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", 7).text("+1");
+  }
+
+  // ── Coordenadas Paralelas (PCP) enlazadas al brushing ──
+  function drawPCP() {
+    const host = document.getElementById("svgPCP"); if (!host) return;
+    const par = host.parentNode, W = par.clientWidth, H = par.clientHeight;
+    const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
+    if (W < 40 || H < 20) return;
+    const p = FEAT.length;
+    const m = { t: 22, r: 12, b: 20, l: 8 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const xScale = d3.scalePoint().domain(FEAT).range([m.l, m.l + iw]).padding(0.08);
+    // Y normalizado [0,1] por variable (datos ya están norm. Min-Max en D.X)
+    const yScale = d3.scaleLinear().domain([0, 1]).range([m.t + ih, m.t]);
+    // Ejes verticales
+    FEAT.forEach(f => {
+      const x = xScale(f);
+      svg.append("line").attr("x1", x).attr("x2", x).attr("y1", m.t).attr("y2", m.t + ih).attr("stroke", "var(--edge)").attr("stroke-width", 1);
+      svg.append("text").attr("x", x).attr("y", m.t - 4).attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 8).text(fshort(f));
+    });
+    // Puntos a mostrar: selección o muestra representativa
+    const hasSel = selected && selected.size > 0;
+    let indices;
+    if (hasSel) {
+      indices = [...selected];
+    } else {
+      const step = Math.max(1, Math.ceil(N / 800));
+      indices = []; for (let i = 0; i < N; i += step) indices.push(i);
+    }
+    // Dibujar polilíneas
+    const lineGen = d3.line();
+    const gLines = svg.append("g").attr("opacity", hasSel ? 0.75 : 0.18);
+    const maxLines = hasSel ? Math.min(indices.length, 1500) : indices.length;
+    for (let li = 0; li < maxLines; li++) {
+      const i = indices[li];
+      const pts = FEAT.map((f, j) => [xScale(f), yScale(D.X[j][i])]);
+      gLines.append("path").attr("d", lineGen(pts))
+        .attr("fill", "none").attr("stroke", colorOf(i))
+        .attr("stroke-width", hasSel ? 1.0 : 0.5);
+    }
+    // Leyenda
+    const sub = document.getElementById("pcpSub");
+    if (sub) sub.textContent = hasSel
+      ? `${selected.size.toLocaleString("es")} registros seleccionados · cada línea = un día`
+      : `muestra ${maxLines.toLocaleString("es")} de ${N.toLocaleString("es")} registros · arrastra en [A] para filtrar`;
+  }
+
+  // ── Control de pestaña del panel inferior ──
+  function drawBottom() {
+    if (bottomMode === "corr") drawCorr();
+    else if (bottomMode === "pcp") drawPCP();
+  }
+  function switchBottom(mode) {
+    bottomMode = mode;
+    document.querySelectorAll(".btab").forEach(b => b.classList.toggle("active", b.dataset.tab === mode));
+    document.getElementById("tab-load").style.display = mode === "load" ? "grid" : "none";
+    document.getElementById("tab-corr").style.display = mode === "corr" ? "block" : "none";
+    document.getElementById("tab-pcp").style.display = mode === "pcp" ? "flex" : "none";
+    const right = document.querySelector(".right");
+    if (right) right.classList.toggle("bottom-expanded", mode !== "load");
+    // Actualizar subtítulo de la cabecera de cargas
+    const lh = document.querySelector(".loadhead .k1");
+    if (lh) lh.parentNode.lastChild.textContent = mode === "load" ? " · PC1 / PC2" : "";
+    drawBottom();
   }
 
   // ── % composición por variable (panel a la derecha de A) ──
@@ -326,7 +474,7 @@
     selected = s; scheduleRedraw();
   }
   let raf = null;
-  function scheduleRedraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = null; drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); }); }
+  function scheduleRedraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = null; drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); drawBottom(); }); }
   function clearSelection() { selected = null; if (A.brushG) A.brushG.call(A.brush.move, null); scheduleRedraw(); }
 
   // ── B / C: histogramas ──
@@ -467,7 +615,7 @@
   function updateSelbar() {
     const el = document.getElementById("selbar"); if (!el) return;
     if (!selected || selected.size === 0) {
-      el.innerHTML = `<div class="row"><span>Sin selección</span></div><div class="hint">Arrastra un recuadro sobre el mapa para enlazar los paneles.</div>`; return;
+      el.innerHTML = `<div class="row"><span>Sin selección</span></div><div class="hint">Arrastra un rectángulo sobre el mapa para enlazar los paneles.</div>`; return;
     }
     const arr = [...selected];
     if (arr.length === 1) { const i = arr[0];
@@ -491,8 +639,8 @@
   const B = { plot: "plotB", svg_id: "svgB", sel_id: "selB", stat_id: "statB", feat: 0, label: "PM2.5 (µg/m³)" };
   const C = { plot: "plotC", svg_id: "svgC", sel_id: "selC", stat_id: "statC", feat: 0, label: "DEWP — punto de rocío (°C)" };
 
-  function buildAll() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); }
-  function rebuild() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); if (A.brushG) A.brushG.call(A.brush); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); }
+  function buildAll() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); drawBottom(); }
+  function rebuild() { setupA(); setupHist(B); setupHist(C); setupD(); setupPct(); if (A.brushG) A.brushG.call(A.brush); drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); drawBottom(); }
 
   function loadDataset(key) {
     const next = DATASETS[key]; if (!next || !next.X) { console.warn("Dataset no disponible:", key); return; }
@@ -508,13 +656,36 @@
   if (cbEl) cbEl.addEventListener("change", (e) => { colorMode = e.target.value; renderLegend(); renderBaseA(); drawA(); });
   const rsEl = document.getElementById("reset");
   if (rsEl) rsEl.addEventListener("click", clearSelection);
-  // Toolbox de variable en B y C: cambia la variable mostrada y re-dibuja.
   const selBEl = document.getElementById("selB");
   if (selBEl) selBEl.addEventListener("change", (e) => { B.feat = +e.target.value; setupHist(B); drawHist(B); });
   const selCEl = document.getElementById("selC");
   if (selCEl) selCEl.addEventListener("change", (e) => { C.feat = +e.target.value; setupHist(C); drawHist(C); });
   let rt = null; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(rebuild, 180); });
+  // Proyección: PCA ↔ UMAP
+  const projEl = document.getElementById("projMode");
+  if (projEl) projEl.addEventListener("change", (e) => {
+    projMode = e.target.value; selected = null;
+    if (A.brushG) A.brushG.call(A.brush.move, null);
+    setupA(); drawA(); drawBottom();
+  });
+  // Pestañas del panel inferior
+  document.querySelectorAll(".btab").forEach(btn => btn.addEventListener("click", () => switchBottom(btn.dataset.tab)));
 
+  // ── Screenshot API ─────────────────────────────────────────────────────────
+  window._aq = {
+    setColor: (mode) => {
+      colorMode = mode;
+      if (cbEl) cbEl.value = mode;
+      renderLegend(); renderBaseA(); drawA();
+    },
+    select: (indices) => {
+      selected = new Set(indices);
+      drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge();
+    },
+    clear: clearSelection,
+  };
+
+  initUMAP();
   loadDataset("treated");
   const ld = document.getElementById("loader"); if (ld) ld.style.display = "none";
 })();
