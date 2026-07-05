@@ -29,8 +29,27 @@
   select,button{font-family:var(--mono); font-size:12px; background:#0c1316; color:var(--ink);
     border:1px solid var(--edge); border-radius:0; padding:5px 8px; cursor:pointer;}
   select:hover,button:hover{border-color:var(--green); color:var(--green);}
-  .legend{display:flex; gap:10px; flex-wrap:wrap; max-width:380px;} .legend .lg{display:flex; align-items:center; gap:5px; color:var(--ink-dim); font-size:11px;}
+  .legend{display:flex; gap:10px; flex-wrap:wrap; max-width:380px;} .legend .lg{display:flex; align-items:center; gap:5px; color:var(--ink-dim); font-size:11px; cursor:pointer;}
+  .legend .lg:hover{color:var(--green);}
   .minibtn{padding:1px 6px; font-size:9px; letter-spacing:.03em; margin-left:2px;} .minibtn.on{border-color:#9be7ff; color:#9be7ff;}
+  .paramsbtn.on{border-color:var(--sel); color:var(--sel);}
+  .taskbar{display:flex; align-items:center; gap:8px; padding:5px 16px; border-bottom:1px solid var(--edge);
+    background:#070b0d; font-size:11px; flex:0 0 auto;}
+  .taskbar .tlabel{color:var(--green); font-weight:700; letter-spacing:.1em;}
+  .taskbtn{font-size:10px; padding:2px 9px; letter-spacing:.03em;}
+  .taskbtn.on{border-color:var(--sel); color:var(--sel);}
+  .taskbar .thint{color:var(--ink-dim); font-size:10px; margin-left:6px; flex:1; line-height:1.35;}
+  .taskbar .thint b, #taskHint{color:var(--ink);}
+  .drawer{position:fixed; top:42px; right:12px; z-index:60; background:#0a1013; border:1px solid var(--edge);
+    padding:10px 12px; width:250px; display:flex; flex-direction:column; gap:9px; box-shadow:0 6px 22px rgba(0,0,0,.5);}
+  .drawer[hidden]{display:none;}   /* el atributo hidden debe ganar al display:flex de .drawer */
+  .drawer .r{display:flex; align-items:center; gap:8px; justify-content:space-between;}
+  .drawer label{margin:0; font-size:11px; color:var(--ink); text-transform:none; letter-spacing:0;}
+  .drawer input[type=range]{flex:1; accent-color:var(--green);}
+  .drawer #knnKval{color:var(--sel); width:22px; text-align:right;}
+  .drawer #clusterQual{color:var(--ink); font-variant-numeric:tabular-nums;}
+  .drawer input[type=number]{width:54px; background:#0c1316; color:var(--ink); border:1px solid var(--edge); font-family:var(--mono); padding:3px 5px;}
+  .drawer .hint{font-size:9.5px; line-height:1.5; color:var(--ink-dim);}
   .scatterhead #layoutMode{margin-left:auto;}
   .dot{width:8px; height:8px;}
   .gstat{font-size:11px; color:var(--ink-dim);} .gstat b{color:var(--ink);}
@@ -42,9 +61,8 @@
   .cell .ttl b{color:var(--green); font-weight:700; margin-right:6px;}
   .cell .plot{flex:1; position:relative; min-height:0;}
 
-  /* Variante: el área derecha gana una 4ª fila para el panel scree (varianza por PC) */
   .right{background:var(--bg); display:grid; grid-template-columns:minmax(0,1fr) 160px;
-    grid-template-rows:auto minmax(0,1fr) 150px 96px; min-height:0; min-width:0;}
+    grid-template-rows:auto minmax(0,1fr) 200px; min-height:0; min-width:0;}
   .scatterhead{grid-column:1/3; grid-row:1; padding:8px 12px 0; display:flex; align-items:baseline; gap:10px;}
   .scatterhead .h{font-size:12px; letter-spacing:.08em; color:var(--green); font-weight:700;}
   .scatterhead .pcsub{font-size:10.5px; color:var(--ink-dim);}
@@ -65,22 +83,14 @@
   .loadhead{font-size:10px; color:var(--ink-dim); margin-bottom:2px; letter-spacing:.04em;}
   .loadhead b{color:var(--green);} .loadhead .k1{color:#5bb0ff;} .loadhead .k2{color:var(--sel);}
   .loadhead #loadSrc{color:var(--ink);}
-  .loadcharts{flex:1; display:grid; grid-template-columns:1fr 1fr; gap:10px; min-height:0;}
+  .loadcharts{flex:1; display:grid; grid-template-columns:1fr; gap:10px; min-height:0;}
   .loadcell{display:flex; flex-direction:column; min-width:0; min-height:0;}
   .lcaption{font-size:9.5px; color:var(--ink-dim); margin-bottom:1px;}
   .lplot{flex:1; position:relative; min-height:0;}
   .lplot svg{position:absolute; top:0; left:0;}
 
-  /* Panel scree: varianza explicada por componente + acumulada (NUEVO en esta variante) */
-  .screepanel{grid-column:1/3; grid-row:4; background:var(--panel); border-top:1px dashed var(--edge);
-    display:flex; flex-direction:column; min-height:0; padding:4px 10px 4px;}
-  .screehead{font-size:10px; color:var(--ink-dim); letter-spacing:.04em; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
-  .screehead b{color:var(--green);} .screehead .acc{color:var(--ink);} .screehead .selk{color:var(--sel);}
-  .screehead #screeSub{color:var(--ink-dim);}
-  .modebtn{margin-left:auto; padding:2px 8px; font-size:10px; letter-spacing:.06em;}
+  .modebtn{padding:2px 8px; font-size:10px; letter-spacing:.06em; margin-left:6px;}
   .modebtn.on{border-color:var(--sel); color:var(--sel);}
-  .screeplot{flex:1; position:relative; min-height:0;}
-  .screeplot svg{position:absolute; top:0; left:0;}
 
   /* Toolbox de variable + estadísticos univariados en B/C */
   .ttl .varsel{padding:2px 6px; font-size:11px; margin-left:2px;}
@@ -112,9 +122,8 @@
   .btab{font-size:9px; padding:2px 7px; letter-spacing:.07em; text-transform:uppercase; opacity:.55; transition:opacity .15s, border-color .15s;}
   .btab.active{border-color:var(--green); color:var(--green); opacity:1;}
   .btab:hover{opacity:.85;}
-  /* Panel inferior expandido: loadings crece a 260px y scree se oculta */
-  .right.bottom-expanded{grid-template-rows:auto minmax(0,1fr) 260px 0 !important;}
-  .right.bottom-expanded .screepanel{display:none;}
+  /* Panel inferior expandido (corr / coord. paralelas): loadings crece */
+  .right.bottom-expanded{grid-template-rows:auto minmax(0,1fr) 340px !important;}
 
 </style>
 </head>
@@ -125,12 +134,29 @@
     <span class="sub" id="subtitle"></span>
     <span class="sp"></span>
     <span><label>data</label><select id="dataset"><option value="treated" selected>tratado</option><option value="raw">crudo</option></select></span>
-    <span><label>color</label><select id="colorBy"><option value="season" selected>estación</option><option value="period">periodo</option><option value="zona">zona</option><option value="aqi">AQI (calidad)</option></select></span>
+    <span><label>color</label><select id="colorBy"><option value="season" selected>estación</option><option value="period">periodo</option><option value="zona">zona</option><option value="cluster">clúster (K-means)</option><option value="aqi">AQI (calidad)</option></select></span>
     <span class="legend" id="legend"></span>
     <button id="reset">CLR</button>
+    <button id="paramsBtn" class="paramsbtn" title="Parámetros: k del KNN y nº de clústeres K-means">⚙ PARÁMS</button>
     <span class="gstat" id="globalStat"></span>
     <span class="aqibadge" id="aqiBadge" title="AQI medio (EPA, máx subíndice PM2.5/PM10)">AQI —</span>
   </header>
+  <div id="paramsPanel" class="drawer" hidden>
+    <div class="pcttitle" style="color:var(--green)">PARÁMETROS</div>
+    <div class="r"><label>KNN · k</label><input type="range" id="knnK" min="3" max="40" value="8"><b id="knnKval">8</b></div>
+    <div class="r"><label>Clústeres N</label><input type="number" id="nClusters" min="2" max="6" value="4"></div>
+    <div class="r"><label>Calidad</label><span id="clusterQual">—</span></div>
+    <div class="hint">Clic en un punto de [A] → sus <b>k</b> vecinos L1 (Manhattan, 10-D) se resaltan y enlazan B/C/D. El color «clúster» activa K-means + contornos.<br>Silueta ∈ [−1,1] (↑ mejor) · Davies-Bouldin (↓ mejor). Elige N que maximice la silueta.</div>
+  </div>
+
+  <!-- Mapeo de las 3 tareas de análisis: cada preset ajusta color + variables B/C y se evidencia en ≥2 vistas -->
+  <div class="taskbar">
+    <span class="tlabel">TAREAS</span>
+    <button class="taskbtn" data-task="zonal">1 · Disparidad zonal</button>
+    <button class="taskbtn" data-task="meteo">2 · Meteorología</button>
+    <button class="taskbtn" data-task="persist">3 · Persistencia</button>
+    <span class="thint" id="taskHint">Elige una tarea ↑. Regla general: selecciona días (clic en un punto del mapa, o en un color de la leyenda) y el resto de paneles los describe.</span>
+  </div>
 
   <main>
     <!-- Distribuciones apiladas a la izquierda (univariado + toolbox de variable) -->
@@ -167,11 +193,11 @@
             <button class="btab" data-tab="pcp">COORD. PARALELAS</button>
           </span>
           · <span class="k1">PC1</span>/<span class="k2">PC2</span> · fuente: <span id="loadSrc">global</span>
+          <button id="pcaMode" class="modebtn" title="GLOBAL: cargas del PCA fijo (+ ◆ desviación de la selección) · CLÚSTER: re-PCA solo del subconjunto seleccionado">modo: GLOBAL</button>
         </div>
         <!-- Pestana 1: loadings clasicos -->
         <div class="loadcharts" id="tab-load">
-          <div class="loadcell"><div class="lcaption">Lollipop · magnitud y signo (PC1/PC2)</div><div class="lplot"><svg id="svgLoad1"></svg></div></div>
-          <div class="loadcell"><div class="lcaption">Polígono · <button id="polyMode" class="minibtn" title="Alterna: PC1/PC2 (ejes principales) ↔ cada variable a lo largo de todos los componentes">ejes principales</button></div><div class="lplot"><svg id="svgLoad2"></svg></div></div>
+          <div class="loadcell"><div class="lcaption">Lollipop · magnitud y signo de cada variable en PC1/PC2 (◆ = desviación de la selección)</div><div class="lplot"><svg id="svgLoad1"></svg></div></div>
         </div>
         <!-- Pestana 2: heatmap de correlaciones Pearson -->
         <div id="tab-corr" style="display:none; flex:1; min-height:0; position:relative;">
@@ -182,13 +208,6 @@
           <div class="lcaption" id="pcpSub" style="padding:1px 4px; flex-shrink:0;"></div>
           <div style="flex:1; position:relative; min-height:0;"><svg id="svgPCP" style="position:absolute;top:0;left:0;width:100%;height:100%;"></svg></div>
         </div>
-      </div>
-      <div class="screepanel">
-        <div class="screehead">
-          <b>VARIANZA POR COMPONENTE (scree)</b> · barras=% por PC · <span class="acc">línea=acum.</span> · <span class="selk">– – selección</span> · <span id="screeSub"></span>
-          <button id="pcaMode" class="modebtn" title="GLOBAL: PCA fijo + selección superpuesta · CLÚSTER: re-PCA solo del subconjunto seleccionado">modo: GLOBAL</button>
-        </div>
-        <div class="screeplot"><svg id="svgScree"></svg></div>
       </div>
     </div>
   </main>

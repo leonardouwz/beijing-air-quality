@@ -1,15 +1,10 @@
-/* aq_app_1.js — Motor de la VARIANTE de prueba (index2_1.html).
-   Copia de aq_app.js + dos añadidos interactivos enlazados a la selección de A:
-     · Panel SCREE (varianza por componente) — #svgScree
-     · Gráficos de CARGAS reactivos a la selección
-   Con un TOGGLE de modo (botón #pcaMode):
-     - "global": PCA fijo del dataset; la selección se SUPERPONE
-        (scree: reparto de varianza de la selección sobre los PC globales;
-         cargas: línea de desviación de la selección por variable).
-     - "rePCA": recalcula un PCA SOLO con los puntos seleccionados (≥ MIN_REPCA);
-        scree y cargas pasan a ser los del clúster (ejes propios, signo alineado al
-        global). El scatter A SIEMPRE permanece en los ejes globales.
-   No modifica aq_app.js ni index2.html — todo vive en esta variante. */
+/* aq_app_1.js — Motor de AIR::MONITOR (prototipo/index.html).
+   Scatter [A] PCA/UMAP + KNN interactivo (L1) + K-means con contornos, todo enlazado
+   a la selección; cuadrantes B/C (histogramas con toolbox) y D (serie temporal).
+   CARGAS (lollipop) reactivas a la selección, con TOGGLE de modo (botón #pcaMode):
+     - "global": cargas del PCA fijo + ◆ desviación de la selección por variable.
+     - "rePCA": recalcula el PCA SOLO con el subconjunto seleccionado (≥ MIN_REPCA),
+        ejes propios con signo alineado al global. El scatter A siempre usa ejes globales. */
 "use strict";
 (function () {
   const errEl = document.getElementById("err");
@@ -78,10 +73,14 @@
 
   let FEAT, FMIN, FMAX, N, IDX, I_PM, I_PM10, I_DEW, I_TEMP, I_WSPM, I_PRES, pc1, pc2, pcs;
   let AQIv, cityAqiAvg = 0, featMeanAll;
-  let pcsAll, allRatios, pcaMean;          // todos los autovectores/ratios + medias (variante)
+  let pcsAll, pcaMean;                      // autovectores globales + medias (para re-PCA de cargas)
   let pcaMode = "global";                  // "global" | "rePCA"
-  let polyMode = "ejes";                    // polígono: "ejes" (PC1/PC2) | "vars" (todas las variables)
   let layoutMode = "pca";                   // scatter A: "pca" (cliente) | "umap" (precalculado)
+  // KNN interactivo (Clase 3): clic en un punto → sus k vecinos L1 en el espacio 10-D original.
+  let knnK = 8, knnAnchor = null, knnNbrs = null;
+  // K-means sobre las 10 variables normalizadas → regímenes con color fijo + contorno.
+  let nClusters = 4, clusterOf = null, clusterMeta = null, clusterStats = null;
+  const CLUSTER_COL = ["#ff6e6e", "#ffb454", "#5bb0ff", "#36e08a", "#c792ea", "#f5d76e"];
   let currentKey = "treated";               // dataset activo (para buscar su embedding UMAP)
   function deriveDataset() {
     FEAT = D.meta.features; FMIN = D.meta.feat_min; FMAX = D.meta.feat_max; N = D.meta.n;
@@ -90,7 +89,7 @@
     I_DEW = IDX["DEW"]; I_TEMP = IDX["TEMP"]; I_WSPM = IDX["WSPM"]; I_PRES = IDX["PRES"];
     B.feat = I_PM; C.feat = I_DEW;
     const r = computePCA(); pc1 = r.pc1; pc2 = r.pc2; pcs = r.pcs;
-    pcsAll = r.allVec; allRatios = r.allRatios; pcaMean = r.mean;
+    pcsAll = r.allVec; pcaMean = r.mean;
     buildDerived();
   }
   function orig(j, i) { return FMIN[j] + D.X[j][i] * (FMAX[j] - FMIN[j]); }
@@ -141,16 +140,6 @@
     return { values: A.map((r, i) => r[i]), vectors: V };
   }
 
-  // Proyección del registro i sobre un autovector (centrado en la media global).
-  function projOnVec(i, vec) { let s = 0; for (let j = 0; j < vec.length; j++) s += (D.X[j][i] - pcaMean[j]) * vec[j]; return s; }
-  // Reparto de la varianza de la SELECCIÓN a lo largo de los PC GLOBALES (suma 1).
-  function selectionShares(arr) {
-    const p = FEAT.length, sum = new Float64Array(p), sumsq = new Float64Array(p);
-    for (const i of arr) for (let k = 0; k < p; k++) { const pr = projOnVec(i, pcsAll[k]); sum[k] += pr; sumsq[k] += pr * pr; }
-    const nn = arr.length; let tot = 0; const v = new Float64Array(p);
-    for (let k = 0; k < p; k++) { const m = sum[k] / nn; v[k] = Math.max(sumsq[k] / nn - m * m, 0); tot += v[k]; }
-    tot = tot || 1; return Array.from(v, x => x / tot);
-  }
   // PCA SOLO del subconjunto: autovectores top-2 (signo alineado al global) + ratios.
   function subsetPCA(arr) {
     const p = FEAT.length, nn = arr.length, mean = new Float64Array(p);
@@ -169,12 +158,12 @@
     const v1 = align(vectors.map(r => r[order[1]]), pcsAll[1]);
     return { v0, v1, ratios: order.map(o => Math.max(values[o], 0) / total) };
   }
-  const cumOf = (a) => { let acc = 0; return a.map(r => (acc += r)); };
 
   let selected = null, colorMode = "season";
   const colorOf = (i) => colorMode === "season" ? SEASON_COL[D.season[i]]
     : colorMode === "period" ? PERIOD_COL[D.period[i]]
     : colorMode === "zona" ? ZONA_COL[D.zona[i]]
+    : colorMode === "cluster" ? (clusterOf ? clusterMeta[clusterOf[i]].color : DIM)
     : aqiCat(AQIv[i]).color;               // colorMode === "aqi": color por banda de AQI del registro
 
   function renderLegend() {
@@ -183,8 +172,94 @@
     if (colorMode === "season") items = D.meta.seasons.map((s, i) => [s, SEASON_COL[i]]);
     else if (colorMode === "period") items = D.meta.periods.map((s, i) => [s, PERIOD_COL[i]]);
     else if (colorMode === "zona") items = D.meta.zonas.map((s, i) => [s, ZONA_COL[i]]);
+    else if (colorMode === "cluster") items = (clusterMeta || []).map(c => [`${c.name} · PM2.5 ${c.pm.toFixed(0)}`, c.color]);  // régimen K-means, nombrado por PM2.5
     else items = AQI_BANDS.map((b, i) => [`${b.name} ${i ? AQI_BANDS[i - 1].hi + 1 : 0}–${b.hi}`, b.color]);  // AQI: nombre + rango
-    el.innerHTML = items.map(([n, c]) => `<span class="lg"><i class="dot" style="background:${c}"></i>${n}</span>`).join("");
+    el.innerHTML = items.map(([n, c], i) => `<span class="lg" data-i="${i}" title="Clic: seleccionar todos estos días"><i class="dot" style="background:${c}"></i>${n}</span>`).join("");
+    el.querySelectorAll(".lg").forEach(sp => sp.addEventListener("click", () => selectCategory(+sp.dataset.i)));
+  }
+  // Clic en una entrada de la leyenda → selecciona todos los días de esa categoría (según el color activo).
+  // Hace que "comparar zonas / estaciones / regímenes" sea un clic: los paneles B/C/D describen ese grupo.
+  function selectCategory(idx) {
+    const match = colorMode === "season" ? (i => D.season[i] === idx)
+      : colorMode === "period" ? (i => D.period[i] === idx)
+      : colorMode === "zona" ? (i => D.zona[i] === idx)
+      : colorMode === "cluster" ? (i => clusterOf && clusterOf[i] === idx)
+      : (i => AQI_BANDS.indexOf(aqiCat(AQIv[i])) === idx);
+    const s = new Set(); for (let i = 0; i < N; i++) if (match(i)) s.add(i);
+    if (!s.size) return;
+    knnAnchor = null; knnNbrs = null; selected = s;   // nota: no llamar A.brush.move(null) — dispara brushEnded y borra la selección
+    scheduleRedraw(); updateAux();
+  }
+
+  // ═══ K-means (Lloyd) sobre las 10 variables Min-Max → regímenes de aire ═══
+  // Se etiquetan por PM2.5 medio descendente: clúster 0 = "Crisis", … = "Limpio".
+  function computeKMeans(kk) {
+    const p = FEAT.length;
+    let seed = 42; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const cent = []; const used = new Set();
+    while (cent.length < kk) { const r = Math.floor(rnd() * N); if (used.has(r)) continue; used.add(r); cent.push(FEAT.map((_, j) => D.X[j][r])); }
+    const assign = new Int16Array(N);
+    for (let it = 0; it < 12; it++) {                 // ponytail: 12 iter fijas; suficiente y acotado para ~10^5 puntos
+      for (let i = 0; i < N; i++) { let best = 0, bd = Infinity; for (let c = 0; c < kk; c++) { let s = 0; for (let j = 0; j < p; j++) { const dd = D.X[j][i] - cent[c][j]; s += dd * dd; } if (s < bd) { bd = s; best = c; } } assign[i] = best; }
+      const sum = Array.from({ length: kk }, () => new Float64Array(p)), cnt = new Int32Array(kk);
+      for (let i = 0; i < N; i++) { const c = assign[i]; cnt[c]++; for (let j = 0; j < p; j++) sum[c][j] += D.X[j][i]; }
+      for (let c = 0; c < kk; c++) if (cnt[c]) for (let j = 0; j < p; j++) cent[c][j] = sum[c][j] / cnt[c];
+    }
+    // Métricas de calidad (validación cuantitativa) en una pasada, sobre los centroides finales:
+    //  · Silueta SIMPLIFICADA: a=dist. euclídea al centroide propio, b=al centroide ajeno más cercano.
+    //    ponytail: la silueta clásica es O(N²); la variante por centroides es O(N·k) y suficiente aquí.
+    //  · Davies-Bouldin: (dispersión_c + dispersión_c') / dist(centroides).
+    const pmSum = new Float64Array(kk), cc = new Int32Array(kk), scatter = new Float64Array(kk);
+    const dc = new Float64Array(kk); let silSum = 0;
+    for (let i = 0; i < N; i++) {
+      const c = assign[i]; cc[c]++; pmSum[c] += orig(I_PM, i);
+      for (let cn = 0; cn < kk; cn++) { let s = 0; for (let j = 0; j < p; j++) { const dd = D.X[j][i] - cent[cn][j]; s += dd * dd; } dc[cn] = Math.sqrt(s); }
+      const a = dc[c]; let b = Infinity; for (let cn = 0; cn < kk; cn++) if (cn !== c && dc[cn] < b) b = dc[cn];
+      silSum += (b - a) / (Math.max(a, b) || 1); scatter[c] += a;
+    }
+    for (let c = 0; c < kk; c++) scatter[c] /= (cc[c] || 1);
+    let dbSum = 0;
+    for (let c = 0; c < kk; c++) { let mx = 0; for (let c2 = 0; c2 < kk; c2++) { if (c2 === c) continue; let s = 0; for (let j = 0; j < p; j++) { const dd = cent[c][j] - cent[c2][j]; s += dd * dd; } const M = Math.sqrt(s) || 1e-9; const R = (scatter[c] + scatter[c2]) / M; if (R > mx) mx = R; } dbSum += mx; }
+    clusterStats = { silhouette: silSum / N, daviesBouldin: kk > 1 ? dbSum / kk : 0 };
+    const pmMean = Array.from(pmSum, (s, c) => s / (cc[c] || 1));
+    const order = d3.range(kk).sort((a, b) => pmMean[b] - pmMean[a]);   // 0 = PM2.5 más alto
+    const rank = new Int16Array(kk); order.forEach((c, r) => rank[c] = r);
+    clusterOf = new Int16Array(N); for (let i = 0; i < N; i++) clusterOf[i] = rank[assign[i]];
+    const NAMES = { 2: ["Crisis", "Limpio"], 3: ["Crisis", "Moderado", "Limpio"], 4: ["Crisis", "Alto", "Moderado", "Limpio"] }[kk];
+    clusterMeta = d3.range(kk).map(r => ({ name: NAMES ? NAMES[r] : "Clúster " + (r + 1), color: CLUSTER_COL[r % CLUSTER_COL.length], pm: pmMean[order[r]], n: cc[order[r]] }));
+    updateClusterQual();
+  }
+  function updateClusterQual() {
+    const el = document.getElementById("clusterQual"); if (!el) return;
+    if (!clusterStats) { el.innerHTML = "—"; return; }
+    const sil = clusterStats.silhouette, q = sil > 0.5 ? "var(--green)" : sil > 0.25 ? "var(--sel)" : "#ff6e6e";
+    el.innerHTML = `Silueta <b style="color:${q}">${sil.toFixed(3)}</b> · DB <b>${clusterStats.daviesBouldin.toFixed(2)}</b>`;
+  }
+  function ensureClusters() { if (!clusterOf || clusterMeta.length !== nClusters) computeKMeans(nClusters); }
+
+  // Contornos por clúster: envolvente convexa (ponytail: convex hull; alphashape cóncavo si los
+  // regímenes se entrelazan). Dibujados en SVG bajo el overlay del brush, sin capturar el ratón.
+  function drawHulls() {
+    const svg = d3.select("#svgA"); svg.selectAll("g.hulls").remove();
+    if (colorMode !== "cluster" || !clusterOf || !A.px) return;
+    const g = svg.insert("g", ":first-child").attr("class", "hulls").attr("pointer-events", "none");
+    for (let c = 0; c < clusterMeta.length; c++) {
+      const pts = []; for (let i = 0; i < N; i++) if (clusterOf[i] === c) pts.push([A.px[i], A.py[i]]);
+      if (pts.length < 3) continue;
+      const hull = d3.polygonHull(pts); if (!hull) continue;
+      g.append("path").attr("d", "M" + hull.join("L") + "Z").attr("fill", clusterMeta[c].color)
+        .attr("fill-opacity", 0.07).attr("stroke", clusterMeta[c].color).attr("stroke-opacity", 0.55).attr("stroke-width", 1.2);
+    }
+  }
+
+  // KNN interactivo: k vecinos más cercanos del ancla por distancia Manhattan (L1) en el espacio
+  // 10-D original normalizado. La vecindad pasa a ser la "selección" → enlaza B/C/D/cargas/scree.
+  function pickKNN(anchor) {
+    const p = FEAT.length, d = new Float64Array(N);
+    for (let q = 0; q < N; q++) { let s = 0; for (let j = 0; j < p; j++) s += Math.abs(D.X[j][anchor] - D.X[j][q]); d[q] = s; }
+    const idx = d3.range(N).sort((a, b) => d[a] - d[b]).slice(0, knnK + 1);   // ponytail: full sort O(N log N); quickselect si N crece
+    knnAnchor = anchor; knnNbrs = idx; selected = new Set(idx);
+    scheduleRedraw(); updateAux();
   }
 
   const DPR = Math.max(1, window.devicePixelRatio || 1);
@@ -225,7 +300,18 @@
       .attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 11).text(isU ? "UMAP-2" : `PC2 (${(pcs[1].ratio * 100).toFixed(1)}% var.)`);
     A.brush = d3.brush().extent([[A.m.l, A.m.t], [A.m.l + A.iw, A.m.t + A.ih]]).on("brush", brushed).on("end", brushEnded);
     A.brushG = svg.append("g").attr("class", "brush").call(A.brush);
-    A.brushG.select(".overlay").on("mousemove.tip", hoverMove).on("mouseleave.tip", hideTip);
+    const ov = A.brushG.select(".overlay");
+    ov.on("mousemove.tip", hoverMove).on("mouseleave.tip", hideTip);
+    // Clic (sin arrastrar) sobre un punto → KNN. Se distingue del brush por la distancia recorrida.
+    let down = null;
+    ov.on("mousedown.knn", (e) => { down = d3.pointer(e, document.getElementById("svgA")); });
+    ov.on("click.knn", (e) => {
+      const up = d3.pointer(e, document.getElementById("svgA"));
+      if (down && Math.hypot(up[0] - down[0], up[1] - down[1]) > 4) { down = null; return; }  // fue un brush
+      down = null; const i = A.quad.find(up[0], up[1], 12);
+      if (i !== undefined) pickKNN(i);
+    });
+    drawHulls();
     const ps = document.getElementById("pcaSub");
     if (ps) ps.textContent = (L.kind === "umap")
       ? `UMAP · ${N.toLocaleString("es")} registros · vecindarios locales (ejes sin escala interpretable)`
@@ -285,114 +371,9 @@
           .attr("transform", `rotate(45 ${dx} ${yc})`).attr("fill", "#9be7ff").attr("opacity", 0.95);
       });
     })();
-
-    // Polígono (svgLoad2) — toggle: "ejes" (PC1/PC2) · "vars" (todas las variables)
-    (function () {
-      const host = document.getElementById("svgLoad2"); if (!host) return;
-      const par = host.parentNode, W = par.clientWidth, H = par.clientHeight;
-      const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
-      if (W < 12 || H < 12) return;
-      if (polyMode === "ejes") {
-        // PC1 vs PC2 (ejes principales) sobre las 10 variables (+ desv. selección en global).
-        const m = { t: 4, r: 8, b: 20, l: 30 };
-        const x = d3.scalePoint().domain(FEAT).range([m.l, W - m.r]).padding(0.5);
-        const y = d3.scaleLinear().domain([-mx, mx]).range([H - m.b, m.t]);
-        svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(0)).attr("y2", y(0)).attr("stroke", "var(--grid)");
-        svg.append("g").attr("class", "axis").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4));
-        svg.selectAll("text.x").data(FEAT).enter().append("text").attr("class", "x")
-          .attr("transform", f => `translate(${x(f)},${H - m.b + 9}) rotate(-42)`)
-          .attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", 8).text(f => fshort(f));
-        const line = d3.line().x((d, j) => x(FEAT[j])).y(d => y(d));
-        [[Array.from(v1), LOAD1], [Array.from(v2), SELC]].forEach(([vec, col]) => {
-          svg.append("path").attr("d", line(vec)).attr("fill", "none").attr("stroke", col).attr("stroke-width", 1.6).attr("opacity", 0.9);
-          FEAT.forEach((f, j) => svg.append("circle").attr("cx", x(f)).attr("cy", y(vec[j])).attr("r", 2).attr("fill", col));
-        });
-        if (dev) {   // desviación de la selección (media norm. selección − media norm. global)
-          svg.append("path").attr("d", line(dev)).attr("fill", "none").attr("stroke", "#9be7ff")
-            .attr("stroke-width", 1.4).attr("stroke-dasharray", "4 3").attr("opacity", 0.95);
-          FEAT.forEach((f, j) => svg.append("circle").attr("cx", x(f)).attr("cy", y(dev[j])).attr("r", 1.8).attr("fill", "#9be7ff"));
-        }
-      } else {
-        // "todas las variables": una línea por VARIABLE a lo largo de TODOS los componentes
-        // globales (PC1…PC10). Revela cómo participa cada variable en cada eje, no solo en PC1/PC2.
-        const comps = pcsAll, K = comps.length, m = { t: 4, r: 10, b: 18, l: 30 };
-        const xc = d3.scalePoint().domain(d3.range(K)).range([m.l, W - m.r]).padding(0.5);
-        let mxv = 0; for (let k = 0; k < K; k++) for (let j = 0; j < FEAT.length; j++) mxv = Math.max(mxv, Math.abs(comps[k][j]));
-        mxv = mxv || 1;
-        const yv = d3.scaleLinear().domain([-mxv, mxv]).range([H - m.b, m.t]);
-        svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", yv(0)).attr("y2", yv(0)).attr("stroke", "var(--grid)");
-        svg.append("g").attr("class", "axis").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(yv).ticks(4));
-        svg.selectAll("text.xc").data(d3.range(K)).enter().append("text").attr("class", "xc")
-          .attr("transform", k => `translate(${xc(k)},${H - m.b + 9}) rotate(-42)`)
-          .attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", 7.5).text(k => "PC" + (k + 1));
-        const linev = d3.line().x((d, k) => xc(k)).y(d => yv(d));
-        FEAT.forEach((f, j) => {
-          const series = comps.map(vec => vec[j]);
-          const col = VAR_COLORS[j % VAR_COLORS.length];
-          svg.append("path").attr("d", linev(series)).attr("fill", "none").attr("stroke", col).attr("stroke-width", 1.2).attr("opacity", 0.85);
-          let ks = 0; for (let k = 1; k < K; k++) if (Math.abs(series[k]) > Math.abs(series[ks])) ks = k;  // etiqueta en su pico
-          svg.append("text").attr("x", xc(ks)).attr("y", yv(series[ks]) - 2).attr("text-anchor", "middle")
-            .attr("fill", col).attr("font-size", 7).text(fshort(f));
-        });
-      }
-    })();
   }
 
-  // ═══ SCREE (varianza por componente) reactivo a la selección ═══
-  function renderScree() {
-    const host = document.getElementById("svgScree"); if (!host || !allRatios) return;
-    const par = host.parentNode, W = par.clientWidth, H = par.clientHeight;
-    const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
-    if (W < 30 || H < 24) return;
-    const hasSel = selected && selected.size > 0;
-    let bars = allRatios, selShares = null, srcLabel = "global";
-    if (pcaMode === "rePCA" && hasSel && selected.size >= MIN_REPCA) {
-      bars = subsetPCA([...selected]).ratios; srcLabel = `clúster n=${selected.size.toLocaleString("es")}`;
-    } else {
-      if (hasSel) selShares = selectionShares([...selected]);
-      srcLabel = (pcaMode === "rePCA" && hasSel) ? `global (selección < ${MIN_REPCA})` : "global";
-    }
-    const m = { t: 8, r: 38, b: 16, l: 36 };
-    const labels = bars.map((_, i) => "PC" + (i + 1));
-    const x = d3.scaleBand().domain(labels).range([m.l, W - m.r]).padding(0.25);
-    const yMax = Math.max(d3.max(bars), selShares ? d3.max(selShares) : 0) || 1;
-    const yL = d3.scaleLinear().domain([0, yMax]).nice().range([H - m.b, m.t]);
-    const yR = d3.scaleLinear().domain([0, 1]).range([H - m.b, m.t]);
-    svg.append("g").attr("class", "axis").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(yL).ticks(3).tickFormat(d3.format(".0%")));
-    svg.append("g").attr("class", "axis").attr("transform", `translate(${W - m.r},0)`).call(d3.axisRight(yR).ticks(3).tickFormat(d3.format(".0%")));
-    svg.append("g").attr("class", "axis").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickSize(0)).selectAll("text").attr("font-size", 8);
-    // Barras del PCA mostrado (global o clúster); PC1/PC2 resaltadas.
-    svg.selectAll("rect.sc").data(bars).enter().append("rect").attr("class", "sc")
-      .attr("x", (d, i) => x(labels[i])).attr("width", x.bandwidth())
-      .attr("y", d => yL(d)).attr("height", d => yL(0) - yL(d))
-      .attr("fill", (d, i) => i < 2 ? "var(--sel)" : "var(--green)").attr("opacity", 0.85);
-    // Línea acumulada del PCA mostrado.
-    const cum = cumOf(bars);
-    const line = d3.line().x((d, i) => x(labels[i]) + x.bandwidth() / 2).y(d => yR(d));
-    svg.append("path").attr("d", line(cum)).attr("fill", "none").attr("stroke", "var(--ink)").attr("stroke-width", 1.4).attr("opacity", 0.85);
-    svg.selectAll("circle.cum").data(cum).enter().append("circle").attr("class", "cum")
-      .attr("cx", (d, i) => x(labels[i]) + x.bandwidth() / 2).attr("cy", d => yR(d)).attr("r", 2.2).attr("fill", "var(--ink)");
-    // Superposición de la SELECCIÓN (solo modo global): outline + acumulada ámbar.
-    if (selShares) {
-      svg.selectAll("rect.selsc").data(selShares).enter().append("rect").attr("class", "selsc")
-        .attr("x", (d, i) => x(labels[i])).attr("width", x.bandwidth())
-        .attr("y", d => yL(d)).attr("height", d => yL(0) - yL(d))
-        .attr("fill", "none").attr("stroke", SELC).attr("stroke-width", 1.2).attr("opacity", 0.95);
-      const cs = cumOf(selShares);
-      svg.append("path").attr("d", line(cs)).attr("fill", "none").attr("stroke", SELC)
-        .attr("stroke-width", 1.3).attr("stroke-dasharray", "4 3").attr("opacity", 0.9);
-    }
-    // Marca PC1+PC2 del PCA mostrado.
-    const c2 = cum[1];
-    svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", yR(c2)).attr("y2", yR(c2))
-      .attr("stroke", "var(--sel)").attr("stroke-dasharray", "4 4").attr("opacity", 0.55);
-    svg.append("text").attr("x", W - m.r).attr("y", yR(c2) - 3).attr("text-anchor", "end")
-      .attr("fill", "var(--sel)").attr("font-size", 9).text(`PC1+PC2 = ${(c2 * 100).toFixed(1)}%`);
-    const sub = document.getElementById("screeSub");
-    if (sub) { const i90 = cum.findIndex(v => v >= 0.9); sub.textContent = `${srcLabel} · ${i90 >= 0 ? (i90 + 1) + " PC para ≥90%" : "≥90% solo con 10 PC"}`; }
-  }
-
-  function updateAux() { renderScree(); renderLoadings(); }
+  function updateAux() { renderLoadings(); }
 
 
   // ── Heatmap de correlación Pearson 10×10 ──
@@ -510,6 +491,14 @@
     if (!hasSel) { ctx.drawImage(A.base, 0, 0, A.W, A.H); return; }
     ctx.globalAlpha = TH.dimAlpha || 0.28; ctx.drawImage(A.base, 0, 0, A.W, A.H); ctx.globalAlpha = 1;
     for (const i of selected) { ctx.fillStyle = colorOf(i); ctx.fillRect(A.px[i] - DOTSEL / 2, A.py[i] - DOTSEL / 2, DOTSEL, DOTSEL); }
+    // Radios KNN: ancla → cada vecino (los cruces largos en UMAP son reales: vecinos en 10-D, no en 2-D).
+    if (knnAnchor != null && knnNbrs) {
+      const ax = A.px[knnAnchor], ay = A.py[knnAnchor];
+      ctx.strokeStyle = SELC; ctx.globalAlpha = 0.5; ctx.lineWidth = 0.8; ctx.beginPath();
+      for (const q of knnNbrs) { if (q === knnAnchor) continue; ctx.moveTo(ax, ay); ctx.lineTo(A.px[q], A.py[q]); }
+      ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(ax, ay, 4, 0, 2 * Math.PI); ctx.stroke();
+    }
   }
   function brushed({ selection }) { if (selection) applyBrush(selection); }
   function brushEnded({ selection }) { if (!selection) { selected = null; scheduleRedraw(); updateAux(); return; } applyBrush(selection); updateAux(); }
@@ -519,11 +508,11 @@
       if (!node.length) { do { const i = node.data; if (A.px[i] >= x0 && A.px[i] <= x1 && A.py[i] >= y0 && A.py[i] <= y1) s.add(i); } while ((node = node.next)); }
       return qx0 > x1 || qy0 > y1 || qx1 < x0 || qy1 < y0;
     });
-    selected = s; scheduleRedraw();
+    selected = s; knnAnchor = null; knnNbrs = null; scheduleRedraw();
   }
   let raf = null;
   function scheduleRedraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = null; drawA(); drawHist(B); drawHist(C); drawD(); drawPct(); updateSelbar(); updateAqiBadge(); drawBottom(); }); }
-  function clearSelection() { selected = null; if (A.brushG) A.brushG.call(A.brush.move, null); scheduleRedraw(); updateAux(); }
+  function clearSelection() { selected = null; knnAnchor = null; knnNbrs = null; if (A.brushG) A.brushG.call(A.brush.move, null); scheduleRedraw(); updateAux(); }
 
   // ── % composición por variable ──
   const PCT = {};
@@ -749,7 +738,8 @@
 
   function loadDataset(key) {
     const next = DATASETS[key]; if (!next || !next.X) { console.warn("Dataset no disponible:", key); return; }
-    D = next; selected = null; currentKey = key; deriveDataset();
+    D = next; selected = null; knnAnchor = null; knnNbrs = null; clusterOf = null; currentKey = key; deriveDataset();
+    if (colorMode === "cluster") ensureClusters();
     if (layoutMode === "umap" && !umapFor(currentKey)) {   // este dataset no tiene embedding UMAP
       layoutMode = "pca";
       const lb = document.getElementById("layoutMode"); if (lb) { lb.textContent = "layout: PCA"; lb.classList.remove("on"); }
@@ -762,7 +752,7 @@
   const dsEl = document.getElementById("dataset");
   if (dsEl) dsEl.addEventListener("change", (e) => { const key = e.target.value; const sub = document.getElementById("subtitle"); if (sub) sub.textContent = "⏳ Recalculando PCA…"; setTimeout(() => loadDataset(key), 20); });
   const cbEl = document.getElementById("colorBy");
-  if (cbEl) cbEl.addEventListener("change", (e) => { colorMode = e.target.value; renderLegend(); renderBaseA(); drawA(); });
+  if (cbEl) cbEl.addEventListener("change", (e) => { colorMode = e.target.value; if (colorMode === "cluster") ensureClusters(); renderLegend(); renderBaseA(); drawA(); drawHulls(); });
   const rsEl = document.getElementById("reset");
   if (rsEl) rsEl.addEventListener("click", clearSelection);
   const selBEl = document.getElementById("selB");
@@ -777,13 +767,15 @@
     pmEl.classList.toggle("on", pcaMode === "rePCA");
     updateAux();
   });
-  // Toggle del polígono: ejes principales (PC1/PC2) ↔ todas las variables (todos los PC).
-  const polyEl = document.getElementById("polyMode");
-  if (polyEl) polyEl.addEventListener("click", () => {
-    polyMode = polyMode === "ejes" ? "vars" : "ejes";
-    polyEl.textContent = polyMode === "ejes" ? "ejes principales" : "todas las variables";
-    polyEl.classList.toggle("on", polyMode === "vars");
-    renderLoadings();
+  // Panel de parámetros ocultable (drawer): k del KNN + nº de clústeres K-means.
+  const pBtn = document.getElementById("paramsBtn"), pPanel = document.getElementById("paramsPanel");
+  if (pBtn && pPanel) pBtn.addEventListener("click", () => { const open = pPanel.hasAttribute("hidden"); if (open) pPanel.removeAttribute("hidden"); else pPanel.setAttribute("hidden", ""); pBtn.classList.toggle("on", open); });
+  const kEl = document.getElementById("knnK"), kVal = document.getElementById("knnKval");
+  if (kEl) kEl.addEventListener("input", (e) => { knnK = +e.target.value; if (kVal) kVal.textContent = knnK; if (knnAnchor != null) pickKNN(knnAnchor); });
+  const ncEl = document.getElementById("nClusters");
+  if (ncEl) ncEl.addEventListener("change", (e) => {
+    nClusters = Math.max(2, Math.min(6, +e.target.value || 4)); e.target.value = nClusters;
+    if (colorMode === "cluster") { computeKMeans(nClusters); renderLegend(); renderBaseA(); drawA(); drawHulls(); }
   });
   // Toggle de layout del scatter A: PCA (cliente) ↔ UMAP (precalculado por umap_embed.py).
   const lmEl = document.getElementById("layoutMode");
@@ -804,6 +796,25 @@
 
   // Pestanas del panel inferior
   document.querySelectorAll(".btab").forEach(btn => btn.addEventListener("click", () => switchBottom(btn.dataset.tab)));
+
+  // Mapeo de tareas: cada preset reutiliza los controles existentes (color + selects B/C) para
+  // dejar la vista lista y que el patrón se lea en ≥2 cuadrantes a la vez.
+  const PRESETS = {
+    zonal:   { color: "zona",   b: "PM2.5", c: "SO2", hint: "DISPARIDAD ZONAL → Ya está coloreado por zona. En la leyenda de arriba haz clic en «Sur» y mira el «PM2.5 medio» del recuadro (~83); luego clic en «Norte» (~71). CONCLUSIÓN: el Norte es más limpio." },
+    meteo:   { color: "season", b: "DEW",  c: "WSPM", hint: "METEOROLOGÍA → Coloreado por estación. Haz clic en «Invierno» en la leyenda de arriba y mira el panel C (WSPM = viento): esos días tienen viento más débil. CONCLUSIÓN: menos viento → no se dispersa → más PM2.5." },
+    persist: { color: "aqi",    b: "PM2.5", c: "O3",  hint: "PERSISTENCIA → Haz clic en un punto naranja o rojo del mapa [A]. Se iluminan sus días parecidos; míralos en la línea de tiempo D (abajo). CONCLUSIÓN: se agrupan en inviernos → el smog persiste, no es un día aislado." },
+  };
+  function applyPreset(key) {
+    const p = PRESETS[key]; if (!p) return;
+    const cb = document.getElementById("colorBy"); if (cb) { cb.value = p.color; cb.dispatchEvent(new Event("change")); }
+    const sb = document.getElementById("selB"); if (sb && IDX[p.b] != null) { sb.value = String(IDX[p.b]); sb.dispatchEvent(new Event("change")); }
+    const sc = document.getElementById("selC"); if (sc && IDX[p.c] != null) { sc.value = String(IDX[p.c]); sc.dispatchEvent(new Event("change")); }
+    const th = document.getElementById("taskHint"); if (th) th.textContent = p.hint;
+  }
+  document.querySelectorAll(".taskbtn").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll(".taskbtn").forEach(b => b.classList.toggle("on", b === btn));
+    applyPreset(btn.dataset.task);
+  }));
 
     loadDataset("treated");
   const ld = document.getElementById("loader"); if (ld) ld.style.display = "none";

@@ -114,6 +114,78 @@ se vincula con punto de rocío bajo (aire frío y seco, inversión térmica).
 
 ---
 
+## Análisis interactivo y validación (Clase 3 · Luo et al. 2024)
+
+Ampliaciones sobre el prototipo base, orientadas a pasar de la exploración a un
+**modelado validado**:
+
+- **KNN interactivo (validación del embedding).** Slider `k` en el panel
+  ⚙ PARÁMS. Al hacer **clic en un punto** de [A] se calculan sus `k` vecinos más
+  cercanos por **distancia Manhattan (L1) en las 10 dimensiones originales** (no
+  en el 2-D del scatter) y se trazan las conexiones ancla→vecino; la vecindad
+  pasa a ser la selección, enlazando B/C/D. Sirve para comprobar que puntos
+  cercanos en el mapa también lo son en el espacio real de características.
+- **Clustering K-means.** Opción `color → clúster`. Etiqueta cada registro y
+  asigna **colores fijos**, con nombres automáticos por PM2.5 medio
+  (Crisis / Alto / Moderado / Limpio). Cada régimen se rodea con un **contorno**
+  (envolvente convexa) que define su frontera sin saturar el scatter.
+- **Métricas de calidad del clúster** (rincón del drawer): **Coeficiente de
+  Silueta** (simplificado por centroides, ↑ mejor, ∈[−1,1]) y **Davies-Bouldin**
+  (↓ mejor). Se recalculan al cambiar `N`; permiten justificar técnicamente el
+  número de clústeres (p. ej. la silueta cae de ≈0.44 en N=2 a ≈0.34 en N=5).
+- **Mapeo de las 3 tareas** (barra TAREAS): presets que configuran color +
+  variables B/C para evidenciar cada tarea en ≥2 vistas a la vez —
+  **1 · Disparidad zonal** (Norte/Sur + PM2.5/SO₂), **2 · Meteorología**
+  (DEWP/WSPM + eje meteorológico del PCA), **3 · Persistencia** (episodio → serie D).
+- **Otros:** toggle **PCA ↔ UMAP** (embedding precalculado por `umap_embed.py`),
+  cargas re-calculables sobre la selección (botón `modo: GLOBAL/CLÚSTER`),
+  pestañas de **correlaciones** y **coordenadas paralelas**, y **badge AQI**
+  dinámico (ciudad o selección).
+
+---
+
+## Validación cualitativa — guion de prueba con usuario
+
+Protocolo para verificar que un usuario objetivo redescubre, con la herramienta,
+los mismos patrones que el análisis identificó (**pendiente de ejecutar**).
+
+**Objetivo.** Comprobar si la herramienta permite a un analista descubrir de
+forma autónoma (a) la **inercia/persistencia del smog** invernal y (b) la
+**disparidad Norte-Sur**, sin instrucción previa sobre los hallazgos.
+
+**Perfil del participante.** 1–3 usuarios tipo *analista de salud pública /
+calidad del aire* (maneja indicadores ambientales; no necesita saber PCA/KNN).
+
+**Montaje.** Sesión de ~30 min, pensar en voz alta (*think-aloud*), pantalla y
+audio grabados. El moderador solo desbloquea, no guía hacia la respuesta.
+
+**Tareas y criterio de éxito** (dar la tarea, no la conclusión):
+
+| # | Consigna al usuario | Éxito si el usuario… |
+|---|---|---|
+| T1 | "¿Hay diferencias de contaminación entre zonas de la ciudad?" | colorea por zona / usa preset **Zonal** y verbaliza que el **Sur** tiene PM2.5 (y SO₂) más altos que el Norte. |
+| T2 | "¿Qué condición meteorológica acompaña a los días más contaminados?" | usa preset **Meteorología** / histogramas y relaciona **DEWP bajo y viento débil** con PM2.5 alto. |
+| T3 | "Un día es crítico. ¿Suele ser un evento aislado o persistente?" | selecciona un episodio y observa en la **serie D** que se agrupa en inviernos → **persistencia** (inercia del smog). |
+
+**Métricas a registrar:**
+- *Tasa de éxito* por tarea (logrado / con pista / no logrado).
+- *Tiempo hasta el insight* de cada tarea.
+- *Nº de pistas* del moderador y dónde se atascó.
+- *Usabilidad*: cuestionario **SUS** (10 ítems) al final + 2–3 preguntas abiertas
+  ("¿qué te sobró/faltó?", "¿confiarías en estos grupos para priorizar?").
+
+**Plantilla de registro** (una fila por participante × tarea):
+
+```
+participante | tarea | éxito(S/pista/N) | t(insight) | nº pistas | cita think-aloud | fricción observada
+```
+
+**Análisis.** Éxito ≥2/3 tareas sin pistas ⇒ la herramienta comunica los
+patrones. Anotar cada punto de fricción como *issue* de rediseño (etiqueta,
+descubribilidad del clic-KNN, legibilidad de contornos, etc.).
+
+---
+
 ## Estructura
 
 ```
