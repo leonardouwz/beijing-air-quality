@@ -252,12 +252,25 @@
     }
   }
 
+  // Top-k por distancia ascendente vía max-heap acotado a tamaño k: O(N log k) en vez de
+  // O(N log N). En el dataset crudo (N=383K) el sort completo dominaba el costo del clic
+  // (~256 de ~350 ms); con k~8-40 esto lo recorta a decenas de ms.
+  function topKByDist(d, n, k) {
+    const heap = [];
+    const siftUp = (i) => { while (i > 0) { const par = (i - 1) >> 1; if (d[heap[par]] >= d[heap[i]]) break; [heap[par], heap[i]] = [heap[i], heap[par]]; i = par; } };
+    const siftDown = (i) => { for (;;) { let top = i; const l = 2 * i + 1, r = 2 * i + 2; if (l < heap.length && d[heap[l]] > d[heap[top]]) top = l; if (r < heap.length && d[heap[r]] > d[heap[top]]) top = r; if (top === i) break; [heap[i], heap[top]] = [heap[top], heap[i]]; i = top; } };
+    for (let q = 0; q < n; q++) {
+      if (heap.length < k) { heap.push(q); siftUp(heap.length - 1); }
+      else if (d[q] < d[heap[0]]) { heap[0] = q; siftDown(0); }
+    }
+    return heap.sort((a, b) => d[a] - d[b]);   // heap.length <= k, ordenar esto es negligible
+  }
   // KNN interactivo: k vecinos más cercanos del ancla por distancia Manhattan (L1) en el espacio
   // 10-D original normalizado. La vecindad pasa a ser la "selección" → enlaza B/C/D/cargas/scree.
   function pickKNN(anchor) {
     const p = FEAT.length, d = new Float64Array(N);
     for (let q = 0; q < N; q++) { let s = 0; for (let j = 0; j < p; j++) s += Math.abs(D.X[j][anchor] - D.X[j][q]); d[q] = s; }
-    const idx = d3.range(N).sort((a, b) => d[a] - d[b]).slice(0, knnK + 1);   // ponytail: full sort O(N log N); quickselect si N crece
+    const idx = topKByDist(d, N, knnK + 1);
     knnAnchor = anchor; knnNbrs = idx; selected = new Set(idx);
     scheduleRedraw(); updateAux();
   }
@@ -383,15 +396,20 @@
     const svg = d3.select(host).attr("width", W).attr("height", H); svg.selectAll("*").remove();
     if (W < 40 || H < 30) return;
     const p = FEAT.length;
+    // Reactivo a la selección: con selección → correlaciones del subconjunto (revela estructura
+    // condicional, p. ej. DEWP↔PM2.5 ≈+0.6 en invierno vs ≈0 global). Sin selección → ciudad.
+    const hasSel = selected && selected.size > 1;
+    const rows = hasSel ? [...selected] : null, n = hasSel ? rows.length : N;
     const means = new Float64Array(p);
-    for (let j = 0; j < p; j++) { let s = 0; const col = D.X[j]; for (let i = 0; i < N; i++) s += col[i]; means[j] = s / N; }
+    for (let j = 0; j < p; j++) { let s = 0; const col = D.X[j]; if (rows) { for (const i of rows) s += col[i]; } else { for (let i = 0; i < N; i++) s += col[i]; } means[j] = s / n; }
     const R = Array.from({ length: p }, () => new Float64Array(p));
     for (let j = 0; j < p; j++) {
       R[j][j] = 1;
       for (let k = j + 1; k < p; k++) {
         let sxy = 0, sx2 = 0, sy2 = 0;
         const cj = D.X[j], ck = D.X[k], mj = means[j], mk = means[k];
-        for (let i = 0; i < N; i++) { const dj = cj[i] - mj, dk = ck[i] - mk; sxy += dj * dk; sx2 += dj * dj; sy2 += dk * dk; }
+        if (rows) { for (const i of rows) { const dj = cj[i] - mj, dk = ck[i] - mk; sxy += dj * dk; sx2 += dj * dj; sy2 += dk * dk; } }
+        else { for (let i = 0; i < N; i++) { const dj = cj[i] - mj, dk = ck[i] - mk; sxy += dj * dk; sx2 += dj * dj; sy2 += dk * dk; } }
         const r = sxy / Math.sqrt(sx2 * sy2 || 1);
         R[j][k] = r; R[k][j] = r;
       }
@@ -424,6 +442,8 @@
     svg.append("text").attr("x", bx).attr("y", by - 2).attr("fill", "var(--ink-dim)").attr("font-size", 7).text("-1");
     svg.append("text").attr("x", bx + bw / 2).attr("y", by - 2).attr("text-anchor", "middle").attr("fill", "var(--ink-dim)").attr("font-size", 7).text("r Pearson");
     svg.append("text").attr("x", bx + bw).attr("y", by - 2).attr("text-anchor", "end").attr("fill", "var(--ink-dim)").attr("font-size", 7).text("+1");
+    svg.append("text").attr("x", gx).attr("y", gy - 2).attr("fill", hasSel ? "var(--sel)" : "var(--ink-dim)").attr("font-size", 8)
+      .text(hasSel ? `selección · n=${n.toLocaleString("es")}` : "ciudad (global)");
   }
 
   // ── Coordenadas Paralelas (PCP) enlazadas al brushing ──
@@ -688,8 +708,10 @@
   const tip = document.getElementById("tooltip");
   function hoverMove(event) { const [mx, my] = d3.pointer(event, document.getElementById("svgA")); const i = A.quad.find(mx, my, 8); if (i === undefined) { hideTip(); return; } showTip(event, i); }
   function showTip(event, i) {
+    const cat = aqiCat(AQIv[i]);
     tip.innerHTML = `<b>${D.meta.stations[D.station[i]]}</b> · ${D.meta.seasons[D.season[i]]} · ${D.meta.periods[D.period[i]]}
       <br><span style="color:var(--ink-dim)">${new Date(D.t[i]).toISOString().slice(0, 10)}</span>
+      <div style="margin-top:4px;font-weight:700;color:${cat.color}">AQI ${Math.round(AQIv[i])} · ${cat.name}</div>
       <table>
         <tr><td class="k">PM2.5</td><td class="v">${orig(I_PM, i).toFixed(1)} µg/m³</td></tr>
         <tr><td class="k">DEWP</td><td class="v">${orig(I_DEW, i).toFixed(1)} °C</td></tr>
@@ -801,7 +823,7 @@
   // dejar la vista lista y que el patrón se lea en ≥2 cuadrantes a la vez.
   const PRESETS = {
     zonal:   { color: "zona",   b: "PM2.5", c: "SO2", hint: "DISPARIDAD ZONAL → Ya está coloreado por zona. En la leyenda de arriba haz clic en «Sur» y mira el «PM2.5 medio» del recuadro (~83); luego clic en «Norte» (~71). CONCLUSIÓN: el Norte es más limpio." },
-    meteo:   { color: "season", b: "DEW",  c: "WSPM", hint: "METEOROLOGÍA → Coloreado por estación. Haz clic en «Invierno» en la leyenda de arriba y mira el panel C (WSPM = viento): esos días tienen viento más débil. CONCLUSIÓN: menos viento → no se dispersa → más PM2.5." },
+    meteo:   { color: "season", b: "DEW",  c: "WSPM", hint: "METEOROLOGÍA → Clic en «Invierno» en la leyenda ↑ y abre la pestaña CORRELACIONES: DEWP↔PM2.5 salta a ≈+0.62 (en verano se invierte, por eso el global ≈0) y el viento (WSPM) es −0.5. CONCLUSIÓN: en invierno, aire húmedo y sin viento atrapa el PM2.5." },
     persist: { color: "aqi",    b: "PM2.5", c: "O3",  hint: "PERSISTENCIA → Haz clic en un punto naranja o rojo del mapa [A]. Se iluminan sus días parecidos; míralos en la línea de tiempo D (abajo). CONCLUSIÓN: se agrupan en inviernos → el smog persiste, no es un día aislado." },
   };
   function applyPreset(key) {

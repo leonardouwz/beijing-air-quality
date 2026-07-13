@@ -102,7 +102,8 @@ dataset crudo. Cambiar de dataset recalcula el PCA (~1.5 s en el crudo, una vez)
 ### PCA en el cliente
 La reducción de dimensionalidad se calcula **en el navegador** sobre el vector
 cargado: centrado → matriz de covarianza 10×10 → autovectores por el método de
-**Jacobi** → proyección a PC1/PC2. PC1+PC2 explican ≈ 71.9 % de la varianza.
+**Jacobi** → proyección a PC1/PC2. PC1+PC2 explican ≈ 71.1 % de la varianza
+(coincide con el 71.1 % reportado en el documento del proyecto).
 
 ---
 

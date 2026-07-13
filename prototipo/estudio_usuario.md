@@ -33,18 +33,20 @@ la mitad de días críticos frente al resto). Norte vs Sur: 71.3 vs 83.1 µg/m³
 8.7 % vs 12.1 % de días críticos → **disparidad zonal confirmada**.
 
 ### T2 · Meteorología — `TAREAS → 2 · Meteorología`
-Preset: color = estación, B = DEWP, C = WSPM.
+Preset: color = estación, B = DEWP, C = WSPM. **Clic en «Invierno» en la leyenda**
+y abrir la pestaña **CORRELACIONES** (reactiva a la selección).
 
-| Relación con PM2.5 | Pearson (ciudad) |
-|---|---:|
-| **Viento (WSPM)** | **−0.431** |
-| DEWP (punto de rocío) | +0.022 |
+| Relación con PM2.5 (Pearson) | Global (todo el año) | **Invierno** |
+|---|---:|---:|
+| DEWP (punto de rocío) | +0.02 | **+0.62** |
+| Viento (WSPM) | −0.43 | −0.54 |
 
-**Patrón a descubrir:** el **viento es el moderador meteorológico dominante** —
-a más viento, menos PM2.5 (dispersión). La correlación **lineal** de DEWP es
-casi nula: su efecto es **no lineal y condicionado por el viento** (ver pestaña
-COORD. PARALELAS y el eje meteorológico del PCA). Insight clave: los picos de
-PM2.5 coinciden con **viento débil**.
+**Patrón a descubrir:** la relación DEWP→PM2.5 es **estacional**. En el año
+completo se diluye (~0, porque en verano se invierte), pero **en invierno DEWP
+domina (+0.62)**: aire frío, húmedo y sin viento retiene el smog. El viento
+(WSPM) es siempre negativo (dispersión). Este es el hallazgo que el documento
+del proyecto reporta como **DEWP r≈+0.48 condicionado por la dirección del
+viento** — el valor +0.48 es la versión condicional/estacional, no la global.
 
 ### T3 · Persistencia — `TAREAS → 3 · Persistencia`
 Preset: color = AQI, B = PM2.5, C = O₃. Seleccionar un episodio crítico y mirar
@@ -61,9 +63,40 @@ De los **3 647 episodios críticos** (PM2.5 > 150):
 
 **Patrón a descubrir:** ~**80 % de los episodios críticos ocurren en otoño-
 invierno** y se agrupan año tras año en la serie D → **persistencia / inercia
-del smog** en los meses fríos (coherente con la alta autocorrelación de Markov).
+del smog** en los meses fríos (coherente con la **persistencia de Markov ≈53 %**
+que reporta el documento: un día crítico tiene ~53 % de seguir crítico al día
+siguiente; la herramienta no computa la matriz de Markov, pero la agrupación en
+la serie D evidencia el mismo fenómeno).
 
 ---
+
+## Reconciliación con el documento del proyecto
+
+Algunas cifras que el documento (NotebookLM) reporta difieren de lo que muestra
+la herramienta **por defecto**, por diferencias de **granularidad y tratamiento**,
+no por contradicción:
+
+| Cifra | Documento | Prototipo (dataset **tratado**, diario) | Prototipo (dataset **crudo**, horario) |
+|---|---:|---:|---:|
+| Varianza PC1+PC2 | 71.1 % | **71.1 %** ✓ | — |
+| DEWP↔PM2.5 | +0.48 (condicional) | +0.02 global · **+0.62 invierno** | +0.12 global |
+| Viento↔PM2.5 | (negativa) | −0.43 | −0.28 |
+| Días críticos Sur | 17.1 % | 12.1 % | **16.4 %** |
+| Días críticos Norte | <12 % | 8.7 % | 13.2 % |
+
+**Causas:**
+1. **Agregación diaria + IQR** (dataset tratado): promediar a día y recortar
+   outliers comprime los picos → menos % de días críticos que en el horario.
+2. **Meteo proyectada 2022-2026:** la meteorología del periodo actual es
+   climatología (media por estación×mes), sin covarianza real con la
+   contaminación de esos días → diluye las correlaciones globales.
+3. **DEWP es estacional:** +0.62 en invierno, se invierte en verano → el global
+   se cancela a ~0. El **+0.48 del documento es el valor condicional**, que la
+   herramienta ya reproduce al seleccionar «Invierno» (pestaña CORRELACIONES).
+
+**Para reproducir las cifras del documento en la herramienta:** usa el dataset
+**crudo** (combo DATA) para los % de días críticos, y **selecciona «Invierno»**
+para la correlación de DEWP.
 
 ## Hoja de registro (rellenar en la sesión real)
 
